@@ -1,0 +1,99 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String                @id @default(uuid())
+  username        String                @unique
+  avatar          String
+  walletBalance   Float                 @default(1000.00)
+  trades          Trade[]
+  holdings        Holding[]
+  transactions    Transaction[]
+  comments        Comment[]
+  copiedRelations CopyTradingRelation[] @relation("CopiedRelations")
+  createdAt       DateTime              @default(now())
+}
+
+model Market {
+  id                String    @id @default(uuid())
+  title             String
+  description       String
+  category          String    // IPL, Finance, Politics, Bollywood
+  image             String
+  endDate           DateTime
+  resolved          Boolean   @default(false)
+  outcome           String?   // "YES" or "NO" or null
+  liquidity         Float     @default(100.0) // b parameter
+  yesShares         Float     @default(0.0)   // q1
+  noShares          Float     @default(0.0)   // q2
+  volume            Float     @default(0.0)   // Total traded INR volume
+  aiConfidence      Float     @default(50.0)
+  marketSentiment   String    @default("Neutral") // Bullish, Bearish, Neutral, Volatile
+  trendingNarrative String    @default("Even odds trade")
+  trades            Trade[]
+  holdings          Holding[]
+  comments          Comment[]
+  createdAt         DateTime  @default(now())
+}
+
+model Trade {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id])
+  side      String   // "YES" or "NO"
+  amount    Float    // INR cash amount
+  shares    Float    // Shares bought
+  price     Float    // Average price per share
+  createdAt DateTime @default(now())
+}
+
+model Holding {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  marketId  String
+  market    Market @relation(fields: [marketId], references: [id])
+  yesShares Float  @default(0.0)
+  noShares  Float  @default(0.0)
+
+  @@unique([userId, marketId])
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "DEPOSIT", "WITHDRAW", "BUY_YES", "BUY_NO", "SETTLEMENT"
+  amount    Float
+  status    String   // "SUCCESS", "PENDING", "FAILED"
+  createdAt DateTime @default(now())
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model CopyTradingRelation {
+  id        String   @id @default(uuid())
+  copierId  String
+  copier    User     @relation("CopiedRelations", fields: [copierId], references: [id], onDelete: Cascade)
+  leaderId  String   // Username or ID of the leader being copied
+  allocated Float
+  profits   Float    @default(0.0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
