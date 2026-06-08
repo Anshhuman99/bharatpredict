@@ -16,23 +16,90 @@ import {
   Activity,
   Users,
   Award,
-  AlertTriangle
+  AlertTriangle,
+  ArrowDownLeft,
+  ChevronDown,
+  ChevronUp,
+  X
 } from 'lucide-react';
 
 export default function Portfolio() {
-  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError } = useWallet();
+  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError, executeSell } = useWallet();
   const [activeTab, setActiveTab] = useState<'positions' | 'history' | 'copying'>('positions');
+
+  // Sell panel state
+  const [activeSellHolding, setActiveSellHolding] = useState<string | null>(null);
+  const [sellSharesInput, setSellSharesInput] = useState<string>('');
+  const [sellSideForHolding, setSellSideForHolding] = useState<'YES' | 'NO'>('YES');
+  const [sellPreview, setSellPreview] = useState<any>(null);
+  const [sellPreviewError, setSellPreviewError] = useState<string | null>(null);
+  const [isSelling, setIsSelling] = useState(false);
+  const [sellResult, setSellResult] = useState<any>(null);
+
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
+  const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
+  const USER_ID = 'anshuman-user-uuid';
 
   useEffect(() => {
     init();
-
-    // Poll active copy relations to capture simulated passive yields
     const interval = setInterval(() => {
       fetchCopyRelations();
     }, 4000);
-
     return () => clearInterval(interval);
   }, []);
+
+  // Debounced sell preview when user changes shares input
+  useEffect(() => {
+    if (!activeSellHolding || !sellSharesInput) { setSellPreview(null); return; }
+    const shares = parseFloat(sellSharesInput);
+    if (isNaN(shares) || shares <= 0) { setSellPreview(null); return; }
+
+    const timer = setTimeout(async () => {
+      try {
+        setSellPreviewError(null);
+        const res = await fetch(
+          `${API_URL}/trade/sell-preview?marketId=${activeSellHolding}&userId=${USER_ID}&side=${sellSideForHolding}&shares=${sellSharesInput}`
+        );
+        if (res.ok) {
+          const payload = await res.json();
+          setSellPreview(payload.success ? payload.data : payload);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setSellPreviewError(err.message || 'Preview unavailable');
+          setSellPreview(null);
+        }
+      } catch { setSellPreviewError('Preview temporarily unavailable.'); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [sellSharesInput, activeSellHolding, sellSideForHolding]);
+
+  const openSellPanel = (holdingId: string, marketId: string, side: 'YES' | 'NO') => {
+    if (activeSellHolding === marketId) {
+      setActiveSellHolding(null);
+    } else {
+      setActiveSellHolding(marketId);
+      setSellSideForHolding(side);
+      setSellSharesInput('');
+      setSellPreview(null);
+      setSellResult(null);
+    }
+  };
+
+  const handleConfirmSell = async (marketId: string) => {
+    const shares = parseFloat(sellSharesInput);
+    if (isNaN(shares) || shares <= 0) return;
+    setIsSelling(true);
+    const result = await executeSell(marketId, sellSideForHolding, shares);
+    setIsSelling(false);
+    if (result.success) {
+      setSellResult(result);
+      setSellSharesInput('');
+      setSellPreview(null);
+      setTimeout(() => { setActiveSellHolding(null); setSellResult(null); }, 5000);
+    } else {
+      setSellPreviewError(result.message || 'Sell failed');
+    }
+  };
 
   if (portfolioError) {
     return (
@@ -249,7 +316,7 @@ export default function Portfolio() {
                   <Briefcase className="w-12 h-12 text-gray-500 mx-auto mb-4 animate-pulse" />
                   <h3 className="text-base font-bold text-white">No Open Positions</h3>
                   <p className="text-xs text-muted mt-1.5 max-w-sm mx-auto">
-                    You don\'t hold any YES/NO prediction shares right now. Visit the dashboard to place your first trade.
+                    You don't hold any YES/NO prediction shares right now. Visit the dashboard to place your first trade.
                   </p>
                 </div>
               ) : (
@@ -259,42 +326,132 @@ export default function Portfolio() {
                       <thead>
                         <tr className="border-b border-border bg-[#181d2a] text-gray-400 text-[10px] font-bold uppercase tracking-wider">
                           <th className="px-6 py-4">Prediction Event</th>
-                          <th className="px-6 py-4">Holdings Side</th>
-                          <th className="px-6 py-4 text-right">Shares Held</th>
-                          <th className="px-6 py-4 text-right">Spot Value</th>
+                          <th className="px-6 py-4">Side</th>
+                          <th className="px-6 py-4 text-right">Shares</th>
+                          <th className="px-6 py-4 text-right">Spot Price</th>
                           <th className="px-6 py-4 text-right">Current Value</th>
+                          <th className="px-6 py-4 text-right">Unrealized P&L</th>
+                          <th className="px-6 py-4 text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60 text-gray-300 font-medium">
+                      <tbody className="text-gray-300 font-medium">
                         {portfolio.holdings.map((h: any) => {
                           const side = h.yesShares > 0 ? 'YES' : 'NO';
                           const shares = h.yesShares > 0 ? h.yesShares : h.noShares;
                           const spotPrice = side === 'YES' ? h.market.yesPrice : h.market.noPrice;
-                          
+                          const costBasis = h.costBasis ?? 0;
+                          const unrealizedPnL = h.currentValue - costBasis;
+                          const isExpanded = activeSellHolding === h.marketId;
+
                           return (
-                            <tr key={h.id} className="hover:bg-[#181d2a]/30 transition-colors duration-200">
-                              <td className="px-6 py-4">
-                                <Link href={`/market/${h.marketId}`} className="font-bold text-white hover:text-brand-accent line-clamp-1">
-                                  {h.market.title}
-                                </Link>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                                  side === 'YES' ? 'text-brand-yes bg-brand-yesMuted border border-brand-yes/20' : 'text-brand-no bg-brand-noMuted border border-brand-no/20'
-                                }`}>
-                                  {side}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-right font-bold text-white">
-                                {shares.toFixed(2)}
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                ₹{spotPrice.toFixed(2)}
-                              </td>
-                              <td className="px-6 py-4 text-right font-black text-brand-yes">
-                                ₹{h.currentValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
+                            <>
+                              <tr key={h.id} className="border-b border-border/40 hover:bg-[#181d2a]/30 transition-colors duration-200">
+                                <td className="px-6 py-4">
+                                  <Link href={`/market/${h.marketId}`} className="font-bold text-white hover:text-brand-accent line-clamp-1">
+                                    {h.market.title}
+                                  </Link>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                    side === 'YES' ? 'text-brand-yes bg-brand-yesMuted border border-brand-yes/20' : 'text-brand-no bg-brand-noMuted border border-brand-no/20'
+                                  }`}>{side}</span>
+                                </td>
+                                <td className="px-6 py-4 text-right font-bold text-white">{shares.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-right">₹{spotPrice.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-right font-black text-brand-yes">
+                                  ₹{h.currentValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  <span className={`font-black ${ unrealizedPnL >= 0 ? 'text-brand-yes' : 'text-brand-no' }`}>
+                                    {unrealizedPnL >= 0 ? '+' : ''}₹{unrealizedPnL.toFixed(2)}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  {!h.market.resolved ? (
+                                    <button
+                                      onClick={() => openSellPanel(h.id, h.marketId, side)}
+                                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 ${
+                                        isExpanded
+                                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                          : 'bg-[#0b0e14] text-gray-400 border border-border/60 hover:text-orange-400 hover:border-orange-500/40'
+                                      }`}>
+                                      <ArrowDownLeft className="w-3 h-3" />
+                                      Sell
+                                      {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-500 font-semibold">Settled</span>
+                                  )}
+                                </td>
+                              </tr>
+
+                              {/* ── Inline Sell Panel ── */}
+                              {isExpanded && (
+                                <tr key={`sell-${h.id}`}>
+                                  <td colSpan={7} className="px-6 py-4 bg-[#0d1018] border-b border-orange-500/10">
+                                    <div className="max-w-md space-y-3">
+                                      <div className="flex items-center justify-between">
+                                        <h4 className="text-xs font-extrabold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                                          <ArrowDownLeft className="w-3.5 h-3.5" />
+                                          Sell {side} Shares
+                                        </h4>
+                                        <button onClick={() => setActiveSellHolding(null)} className="text-gray-500 hover:text-white">
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex gap-3 items-end">
+                                        <div className="flex-1">
+                                          <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Shares to Sell</label>
+                                          <input type="number" placeholder={`Max ${shares.toFixed(2)}`}
+                                            value={sellSharesInput}
+                                            onChange={(e) => setSellSharesInput(e.target.value)}
+                                            step="0.01" min="0" max={shares}
+                                            className="w-full bg-[#121620] border border-border focus:border-orange-500/50 outline-none rounded-xl px-3 py-2.5 text-xs font-bold text-white" />
+                                        </div>
+                                        <button type="button" onClick={() => setSellSharesInput(shares.toFixed(2))}
+                                          className="px-3 py-2.5 text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-xl hover:bg-orange-500/20 transition-colors whitespace-nowrap">
+                                          Sell All
+                                        </button>
+                                      </div>
+
+                                      {sellPreview && sellPreview.netCash > 0 && (
+                                        <div className="bg-[#121620] rounded-xl p-3 border border-orange-500/15 space-y-1.5 text-[11px]">
+                                          <div className="flex justify-between">
+                                            <span className="text-gray-400 font-semibold">Gross Cash</span>
+                                            <span className="font-bold text-white">₹{sellPreview.cashReceived.toFixed(2)}</span>
+                                          </div>
+                                          <div className="flex justify-between">
+                                            <span className="text-gray-400 font-semibold">Fee (1%)</span>
+                                            <span className="font-bold text-orange-400">-₹{sellPreview.fee.toFixed(2)}</span>
+                                          </div>
+                                          <div className="flex justify-between border-t border-orange-500/10 pt-1.5 font-black">
+                                            <span className="text-orange-400">Net to Wallet</span>
+                                            <span className="text-white">₹{sellPreview.netCash.toFixed(2)}</span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {sellPreviewError && (
+                                        <p className="text-[10px] text-brand-no font-semibold">{sellPreviewError}</p>
+                                      )}
+
+                                      {sellResult && (
+                                        <p className="text-[10px] text-brand-yes font-bold">
+                                          ✅ Sold {sellResult.sharesSold?.toFixed(2)} shares — ₹{sellResult.netCash?.toFixed(2)} credited!
+                                        </p>
+                                      )}
+
+                                      <button onClick={() => handleConfirmSell(h.marketId)}
+                                        disabled={isSelling || !sellSharesInput || parseFloat(sellSharesInput) <= 0}
+                                        className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-xl transition-all duration-200">
+                                        {isSelling ? 'Processing...' : `CONFIRM SELL ${side} SHARES`}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           );
                         })}
                       </tbody>
@@ -376,40 +533,56 @@ export default function Portfolio() {
                       <thead>
                         <tr className="border-b border-border bg-[#181d2a] text-gray-400 text-[10px] font-bold uppercase tracking-wider">
                           <th className="px-6 py-4">Trade ID</th>
-                          <th className="px-6 py-4">Side</th>
-                          <th className="px-6 py-4 text-right">Shares Traded</th>
+                          <th className="px-6 py-4">Action</th>
+                          <th className="px-6 py-4 text-right">Shares</th>
                           <th className="px-6 py-4 text-right">Avg Price</th>
-                          <th className="px-6 py-4 text-right">INR Invested</th>
+                          <th className="px-6 py-4 text-right">Cash In/Out</th>
                           <th className="px-6 py-4 text-right">Timestamp</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/60 font-medium">
-                        {portfolio.recentTrades.map((t: any) => (
+                        {portfolio.recentTrades.map((t: any) => {
+                          const isSell = t.side === 'SELL_YES' || t.side === 'SELL_NO';
+                          const displaySide = isSell
+                            ? t.side.replace('SELL_', '')
+                            : t.side;
+
+                          return (
                           <tr key={t.id} className="hover:bg-[#181d2a]/30 transition-colors duration-200">
                             <td className="px-6 py-4 font-mono text-[10px] truncate max-w-[120px] text-gray-500">
                               {t.id}
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                                t.side === 'YES' ? 'text-brand-yes bg-brand-yesMuted border border-brand-yes/20' : 'text-brand-no bg-brand-noMuted border border-brand-no/20'
-                              }`}>
-                                BUY {t.side}
-                              </span>
+                              {isSell ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold text-orange-400 bg-orange-500/10 border border-orange-500/20">
+                                  SELL {displaySide}
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                  t.side === 'YES' ? 'text-brand-yes bg-brand-yesMuted border border-brand-yes/20' : 'text-brand-no bg-brand-noMuted border border-brand-no/20'
+                                }`}>
+                                  BUY {t.side}
+                                </span>
+                              )}
                             </td>
                             <td className="px-6 py-4 text-right text-white font-bold">
-                              {t.shares.toFixed(2)}
+                              {Math.abs(t.shares).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 text-right">
                               ₹{t.price.toFixed(2)}
+
                             </td>
                             <td className="px-6 py-4 text-right font-extrabold text-white">
-                              ₹{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              <span className={isSell ? 'text-brand-yes' : 'text-white'}>
+                                {isSell ? '+' : '-'}₹{Math.abs(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </span>
                             </td>
                             <td className="px-6 py-4 text-right text-gray-400">
                               {new Date(t.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

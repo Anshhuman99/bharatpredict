@@ -240,14 +240,14 @@ export class TradingService {
         data: { walletBalance: { increment: sellCalc.netCash } },
       });
 
-      // 8. Record the sell trade
+      // 8. Record the sell trade with positive values and SELL_YES/SELL_NO side
       const trade = await tx.trade.create({
         data: {
           userId,
           marketId,
-          side,
-          amount: -sellCalc.netCash,   // negative = cash came into wallet (sell)
-          shares: -actualSell,          // negative = shares left holding
+          side: `SELL_${side}`,   // distinguishes sells from buys in history
+          amount: sellCalc.netCash,  // positive: cash received by user
+          shares: actualSell,         // positive: shares sold
           price: sellCalc.avgSellPrice,
         },
         include: { user: { select: { username: true, avatar: true } } },

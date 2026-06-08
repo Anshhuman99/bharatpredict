@@ -48,13 +48,15 @@ export class PortfolioService {
       let noCashSpent = 0;
 
       marketTrades.forEach((trade) => {
+        // Only count BUY trades for cost basis — SELL_YES/SELL_NO are exits, not entries
         if (trade.side === 'YES') {
           yesSharesBought += trade.shares;
           yesCashSpent += trade.amount;
-        } else {
+        } else if (trade.side === 'NO') {
           noSharesBought += trade.shares;
           noCashSpent += trade.amount;
         }
+        // 'SELL_YES' and 'SELL_NO' trades are intentionally excluded from cost basis
       });
 
       if (market.resolved) {
@@ -77,19 +79,22 @@ export class PortfolioService {
           
           const yesAvgEntry = yesSharesBought > 0 ? yesCashSpent / yesSharesBought : 0;
           const noAvgEntry = noSharesBought > 0 ? noCashSpent / noSharesBought : 0;
-          const initialCostBasis = holding.yesShares * yesAvgEntry + holding.noShares * noAvgEntry;
+          // Cost basis = weighted average entry cost for remaining shares
+          const costBasis = holding.yesShares * yesAvgEntry + holding.noShares * noAvgEntry;
           
-          const pnl = currentValue - initialCostBasis;
+          const pnl = currentValue - costBasis;
           
           totalUnrealizedPnL += pnl;
           totalHoldingsValue += currentValue;
-          totalInvestedAmount += initialCostBasis;
+          totalInvestedAmount += costBasis;
           
           const avgEntryPrice = holding.yesShares > 0 ? yesAvgEntry : noAvgEntry;
 
           holdingsWithMarketData.push({
             ...holding,
             currentValue: parseFloat(currentValue.toFixed(2)),
+            costBasis: parseFloat(costBasis.toFixed(2)),
+            unrealizedPnL: parseFloat(pnl.toFixed(2)),
             avgEntryPrice: parseFloat(avgEntryPrice.toFixed(2)),
             pnl: parseFloat(pnl.toFixed(2)),
             market: {
@@ -101,6 +106,7 @@ export class PortfolioService {
         }
       }
     }
+
 
     // Retrieve recent trades to show in history and calculate cost basis
     const trades = await this.prisma.trade.findMany({
