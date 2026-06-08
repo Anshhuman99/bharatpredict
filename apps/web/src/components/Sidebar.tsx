@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import {
   TrendingUp,
@@ -11,14 +12,14 @@ import {
   Home,
   Flame,
   Globe,
-  DollarSign,
   ChevronRight,
-  TrendingDown,
   ShieldCheck
 } from 'lucide-react';
 
-export default function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const cat = searchParams.get('cat') || '';
   const { walletBalance, username, avatar } = useWallet();
 
   const navigationItems = [
@@ -31,6 +32,17 @@ export default function Sidebar() {
     { name: 'Wallet', href: '/wallet', icon: Wallet },
     { name: 'Admin Panel', href: '/admin', icon: ShieldCheck },
   ];
+
+  const checkIsActive = (itemHref: string) => {
+    if (itemHref.startsWith('/dashboard')) {
+      if (itemHref.includes('cat=')) {
+        const itemCat = itemHref.split('cat=')[1];
+        return pathname === '/dashboard' && cat === itemCat;
+      }
+      return pathname === '/dashboard' && !cat;
+    }
+    return pathname === itemHref;
+  };
 
   return (
     <aside className="w-64 border-r border-border bg-[#0b0e14]/90 backdrop-blur-md h-screen fixed left-0 top-0 hidden md:flex flex-col justify-between p-6 z-20">
@@ -70,7 +82,7 @@ export default function Sidebar() {
         {/* Navigation Feed Links */}
         <nav className="space-y-1.5">
           {navigationItems.map((item) => {
-            const isActive = pathname === item.href || (item.href.includes('cat=') && pathname === '/dashboard');
+            const isActive = checkIsActive(item.href);
             const Icon = item.icon;
             
             return (
@@ -106,5 +118,17 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+export default function Sidebar() {
+  return (
+    <Suspense fallback={
+      <aside className="w-64 border-r border-border bg-[#0b0e14]/90 backdrop-blur-md h-screen fixed left-0 top-0 hidden md:flex flex-col p-6 z-20">
+        <div className="text-gray-500 text-xs font-semibold">Loading sidebar...</div>
+      </aside>
+    }>
+      <SidebarContent />
+    </Suspense>
   );
 }

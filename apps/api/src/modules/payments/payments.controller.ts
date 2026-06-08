@@ -21,7 +21,9 @@ export class PaymentsController {
 
   @Post('simulate-webhook')
   async simulateWebhook(@Body() dto: { orderId: string; amount: number; userId: string }) {
-    return await this.paymentsService.simulateWebhook(dto.orderId, dto.amount, dto.userId);
+    const { payload, signature } = await this.paymentsService.simulateWebhook(dto.orderId, dto.amount, dto.userId);
+    await this.handleWebhook(signature, payload);
+    return { payload, signature };
   }
 
   @Post('webhook')

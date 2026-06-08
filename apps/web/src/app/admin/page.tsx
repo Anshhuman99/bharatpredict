@@ -48,7 +48,7 @@ export default function AdminDashboard() {
 
   const fetchRiskTelemetry = async () => {
     try {
-      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050') + '/api/v1';
+      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
       const res = await fetch(`${API_URL}/admin/trades`);
       if (res.ok) {
         const payload = await res.json();
@@ -87,7 +87,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050') + '/api/v1';
+      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
       const res = await fetch(`${API_URL}/admin/markets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,7 +128,7 @@ export default function AdminDashboard() {
     setResolveSuccess(null);
 
     try {
-      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050') + '/api/v1';
+      const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
       const res = await fetch(`${API_URL}/admin/markets/${marketId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

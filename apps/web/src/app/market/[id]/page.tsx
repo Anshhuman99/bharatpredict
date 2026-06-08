@@ -28,7 +28,7 @@ interface Params {
   id: string;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
 
 function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +54,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const [comments, setComments] = useState<any[]>([]);
   const [newCommentText, setNewCommentText] = useState<string>('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Fetch specific market details and comments
   const fetchDetails = async () => {
@@ -87,7 +88,12 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     if (socket) {
       socket.on(`new_comment_${marketId}`, (newComment: any) => {
-        setComments((prev) => [newComment, ...prev]);
+        setComments((prev) => {
+          if (prev.some((c) => c.id === newComment.id)) {
+            return prev;
+          }
+          return [newComment, ...prev];
+        });
       });
 
       return () => {
@@ -100,17 +106,20 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     if (!market || !cashAmount) {
       setCalculatedShares(0);
+      setPreviewError(null);
       return;
     }
 
     const amt = parseFloat(cashAmount);
     if (isNaN(amt) || amt <= 0) {
       setCalculatedShares(0);
+      setPreviewError(null);
       return;
     }
 
     const timer = setTimeout(async () => {
       try {
+        setPreviewError(null);
         const res = await fetch(
           `${API_URL}/trade/preview?marketId=${marketId}&side=${tradeSide}&amount=${cashAmount}`
         );
@@ -121,10 +130,16 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
             setCalculatedShares(preview.shares);
             setAvgPrice(preview.avgPrice);
             setSlippage(preview.slippage * 100);
+          } else {
+            setPreviewError(payload.message || 'Failed to fetch trade preview');
           }
+        } else {
+          const errPayload = await res.json().catch(() => ({}));
+          setPreviewError(errPayload.message || 'Failed to fetch trade preview');
         }
       } catch (e) {
         console.error('Error fetching trade preview:', e);
+        setPreviewError('Preview temporarily unavailable. You can still trade.');
       }
     }, 200); // 200ms debounce to prevent hitting the server on every keypress!
 
@@ -173,6 +188,14 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       });
 
       if (res.ok) {
+        const payload = await res.json();
+        const createdComment = payload.success ? payload.data : payload;
+        setComments((prev) => {
+          if (prev.some((c) => c.id === createdComment.id)) {
+            return prev;
+          }
+          return [createdComment, ...prev];
+        });
         setNewCommentText('');
       } else {
         console.error('Failed to post comment');
@@ -507,6 +530,13 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                     </div>
                   )}
 
+                  {previewError && (
+                    <div className="p-3 bg-brand-accent/5 border border-brand-accent/15 rounded-xl flex items-start gap-2.5 text-xs text-gray-400 leading-relaxed font-semibold">
+                      <Info className="w-4 h-4 text-brand-accent flex-shrink-0 mt-0.5" />
+                      <span>{previewError}</span>
+                    </div>
+                  )}
+
                   {tradeError && (
                     <div className="p-3 bg-brand-noMuted border border-brand-no/25 rounded-xl flex items-start gap-2.5 text-xs text-brand-no leading-relaxed">
                       <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -526,7 +556,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
 
                   <button
                     type="submit"
-                    disabled={isSubmitting || calculatedShares <= 0}
+                    disabled={isSubmitting || (calculatedShares <= 0 && !previewError) || !cashAmount || parseFloat(cashAmount) <= 0}
                     className={`w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white shadow-glow transition-all duration-200 ${
                       tradeSide === 'YES' ? 'bg-brand-yes hover:bg-green-600' : 'bg-brand-no hover:bg-red-600'
                     } disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed`}

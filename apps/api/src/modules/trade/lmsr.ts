@@ -80,15 +80,21 @@ export class LMSR {
     const x1 = (cashAmount + C0) / b;
     const x2 = q2 / b;
     
-    const diff = x2 - x1;
+    let diff = x2 - x1;
     // Handle edge conditions where diff is too close to 0 to prevent NaN
     if (diff >= 0) return 0;
+    if (diff > -1e-10) {
+      diff = -1e-10;
+    }
     
     const term = Math.log(1 - Math.exp(diff));
     const finalQ1 = b * (x1 + term);
     
     const shares = finalQ1 - q1;
-    return Math.max(0, shares);
+    if (isNaN(shares) || !isFinite(shares) || shares <= 0) {
+      return 0;
+    }
+    return shares;
   }
 
   /**
@@ -102,14 +108,20 @@ export class LMSR {
     const x1 = (cashAmount + C0) / b;
     const x2Prime = q1 / b;
     
-    const diff = x2Prime - x1;
+    let diff = x2Prime - x1;
     if (diff >= 0) return 0;
+    if (diff > -1e-10) {
+      diff = -1e-10;
+    }
     
     const term = Math.log(1 - Math.exp(diff));
     const finalQ2 = b * (x1 + term);
     
     const shares = finalQ2 - q2;
-    return Math.max(0, shares);
+    if (isNaN(shares) || !isFinite(shares) || shares <= 0) {
+      return 0;
+    }
+    return shares;
   }
 
   /**

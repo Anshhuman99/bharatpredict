@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
-import { Market, PortfolioSummary, Trade } from '@bharatpredict/types';
+import { Market, PortfolioSummary, Trade, SYSTEM_USER_ID } from '@bharatpredict/types';
 
 interface WalletState {
   userId: string;
@@ -14,6 +14,8 @@ interface WalletState {
   socket: Socket | null;
   socketConnected: boolean;
   isLoading: boolean;
+  portfolioError: string | null;
+  isInitialized: boolean;
   
   // Actions
   init: () => Promise<void>;
@@ -27,9 +29,9 @@ interface WalletState {
   addGlobalTrade: (trade: any) => void;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
-const USER_ID = 'anshuman-user-uuid'; // Match UUID seeded in backend database
+const USER_ID = SYSTEM_USER_ID; // Match UUID seeded in backend database
 
 export const useWallet = create<WalletState>((set, get) => ({
   userId: USER_ID,
@@ -43,12 +45,26 @@ export const useWallet = create<WalletState>((set, get) => ({
   socket: null,
   socketConnected: false,
   isLoading: false,
+  portfolioError: null,
+  isInitialized: false,
 
   init: async () => {
+    if (get().isInitialized) {
+      return;
+    }
+
+    set({ isLoading: true });
+
     // 1. Initial REST loads
     await get().fetchMarkets();
     await get().fetchPortfolio();
     await get().fetchCopyRelations();
+
+    if (!get().portfolioError) {
+      set({ isInitialized: true });
+    }
+
+    set({ isLoading: false });
 
     // 2. Connect WebSocket for real-time tickers
     if (!get().socket) {
@@ -95,6 +111,7 @@ export const useWallet = create<WalletState>((set, get) => ({
 
   fetchPortfolio: async () => {
     try {
+      set({ portfolioError: null });
       const res = await fetch(`${API_URL}/portfolio?userId=${USER_ID}`);
       if (res.ok) {
         const payload = await res.json();
@@ -102,10 +119,15 @@ export const useWallet = create<WalletState>((set, get) => ({
         set({
           portfolio: data,
           walletBalance: data.walletBalance,
+          portfolioError: null,
         });
+      } else {
+        const errPayload = await res.json().catch(() => ({}));
+        set({ portfolioError: errPayload.message || 'Failed to fetch portfolio data. Please make sure database is seeded.' });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching portfolio:', e);
+      set({ portfolioError: e.message || 'Failed to connect to the server.' });
     }
   },
 

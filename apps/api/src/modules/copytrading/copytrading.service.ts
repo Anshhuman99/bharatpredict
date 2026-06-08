@@ -27,6 +27,15 @@ export class CopyTradingService {
         throw new NotFoundException('Copier user not found');
       }
 
+      // Verify leader user exists
+      const leader = await tx.user.findUnique({
+        where: { id: leaderId },
+      });
+
+      if (!leader) {
+        throw new NotFoundException('Leader user not found');
+      }
+
       if (copier.walletBalance < allocated) {
         throw new BadRequestException(`Insufficient balance to allocate. Available: ₹${copier.walletBalance.toFixed(2)}, Required: ₹${allocated.toFixed(2)}`);
       }
@@ -83,10 +92,6 @@ export class CopyTradingService {
   }
 
   async getActiveRelations(userId: string) {
-    // Before returning, run a micro-simulation of trading profits
-    // to give it a dynamic "Bloomberg/active trading" feeling!
-    await this.simulateLeaderTrades(userId);
-
     return await this.prisma.copyTradingRelation.findMany({
       where: { copierId: userId, active: true },
       orderBy: { createdAt: 'desc' },

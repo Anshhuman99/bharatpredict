@@ -22,6 +22,7 @@ export default function Leaderboard() {
 
   const topThree = [
     {
+      id: 'amit-verma-uuid',
       username: 'Amit Verma',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
       earnings: '₹2,84,500',
@@ -29,6 +30,7 @@ export default function Leaderboard() {
       volume: '₹8.4L',
     },
     {
+      id: 'prerna-kapoor-uuid',
       username: 'Prerna Kapoor',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150',
       earnings: '₹1,95,000',
@@ -36,6 +38,7 @@ export default function Leaderboard() {
       volume: '₹5.2L',
     },
     {
+      id: 'rajesh-nair-uuid',
       username: 'Rajesh Nair',
       avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
       earnings: '₹1,42,000',
@@ -45,11 +48,11 @@ export default function Leaderboard() {
   ];
 
   const rankingList = [
-    { rank: 4, name: 'Siddharth Sen', accuracy: '70.2%', earnings: '₹1,24,000', volume: '₹3.4L' },
-    { rank: 5, name: 'Neha Sharma', accuracy: '69.8%', earnings: '₹1,18,500', volume: '₹2.8L' },
-    { rank: 6, name: 'Vikram Mehta', accuracy: '68.5%', earnings: '₹95,200', volume: '₹2.1L' },
-    { rank: 7, name: 'Ananya Roy', accuracy: '67.4%', earnings: '₹88,000', volume: '₹1.9L' },
-    { rank: 8, name: 'Kunal Patil', accuracy: '66.9%', earnings: '₹72,400', volume: '₹1.5L' },
+    { id: 'siddharth-sen-uuid', rank: 4, name: 'Siddharth Sen', accuracy: '70.2%', earnings: '₹1,24,000', volume: '₹3.4L' },
+    { id: 'neha-sharma-uuid', rank: 5, name: 'Neha Sharma', accuracy: '69.8%', earnings: '₹1,18,500', volume: '₹2.8L' },
+    { id: 'vikram-mehta-uuid', rank: 6, name: 'Vikram Mehta', accuracy: '68.5%', earnings: '₹95,200', volume: '₹2.1L' },
+    { id: 'ananya-roy-uuid', rank: 7, name: 'Ananya Roy', accuracy: '67.4%', earnings: '₹88,000', volume: '₹1.9L' },
+    { id: 'kunal-patil-uuid', rank: 8, name: 'Kunal Patil', accuracy: '66.9%', earnings: '₹72,400', volume: '₹1.5L' },
   ];
 
   const handleCopyClick = (leader: any) => {
@@ -77,7 +80,7 @@ export default function Leaderboard() {
       return;
     }
 
-    const res = await startCopyTrading(selectedLeader.username || selectedLeader.name, amt);
+    const res = await startCopyTrading(selectedLeader.id, amt);
     if (res.success) {
       setCopySuccess(true);
       setTimeout(() => {

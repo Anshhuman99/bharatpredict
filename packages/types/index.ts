@@ -130,3 +130,6 @@ export interface CopyTradingRequestDto {
   allocated: number;
 }
 
+export const SYSTEM_USER_ID = 'anshuman-user-uuid';
+
+

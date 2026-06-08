@@ -56,7 +56,7 @@ export class TradingService {
       const { shares, fee, avgPrice } = calculation;
 
       if (shares <= 0) {
-        throw new BadRequestException('The trade size is too small or liquidity is too low');
+        throw new BadRequestException('Trade size too small');
       }
 
       // 4. Update user's wallet balance (decrement total cash spent)
@@ -137,6 +137,7 @@ export class TradingService {
 
       this.realtime.broadcastNewTrade({
         id: trade.id,
+        marketId: market.id,
         username: user.username,
         avatar: user.avatar,
         marketTitle: market.title,
@@ -186,6 +187,10 @@ export class TradingService {
       side,
       0.01, // 1% platform fee
     );
+
+    if (calculation.shares <= 0) {
+      throw new BadRequestException('Trade size too small');
+    }
 
     return {
       shares: calculation.shares,

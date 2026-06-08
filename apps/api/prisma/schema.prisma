@@ -17,6 +17,7 @@ model User {
   transactions    Transaction[]
   comments        Comment[]
   copiedRelations CopyTradingRelation[] @relation("CopiedRelations")
+  ledRelations    CopyTradingRelation[] @relation("LedRelations")
   createdAt       DateTime              @default(now())
 }
 
@@ -91,7 +92,8 @@ model CopyTradingRelation {
   id        String   @id @default(uuid())
   copierId  String
   copier    User     @relation("CopiedRelations", fields: [copierId], references: [id], onDelete: Cascade)
-  leaderId  String   // Username or ID of the leader being copied
+  leaderId  String
+  leader    User     @relation("LedRelations", fields: [leaderId], references: [id], onDelete: Cascade)
   allocated Float
   profits   Float    @default(0.0)
   active    Boolean  @default(true)

@@ -8,7 +8,7 @@ export class AppController {
       message: '🚀 Welcome to the BharatPredict Backend API!',
       status: 'healthy',
       apiDocs: 'Use standard REST endpoints like /markets, /portfolio, /wallet, etc.',
-      frontendUrl: 'http://127.0.0.1:3050',
+      frontendUrl: 'http://localhost:3050',
     };
   }
 }

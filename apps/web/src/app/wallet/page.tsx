@@ -16,23 +16,18 @@ import {
   Clock,
   ExternalLink
 } from 'lucide-react';
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4050';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
 
 export default function Wallet() {
-  const { init, walletBalance, withdrawCash, userId } = useWallet();
+  const { init, walletBalance, depositCash, withdrawCash, userId } = useWallet();
   const [walletDetails, setWalletDetails] = useState<any>(null);
 
   const [depositAmount, setDepositAmount] = useState<string>('1000');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('500');
   const [upiId, setUpiId] = useState<string>('anshuman@okaxis');
   
-  // UPI QR Code Popup Modal states
-  const [showUpiModal, setShowUpiModal] = useState(false);
-  const [activeOrder, setActiveOrder] = useState<any>(null);
   const [isProcessingPay, setIsProcessingPay] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-
   const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   const fetchLedger = async () => {
@@ -52,7 +47,7 @@ export default function Wallet() {
     fetchLedger();
   }, []);
 
-  const handleDepositClick = async (e: React.FormEvent) => {
+  const handleDepositSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(depositAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -63,83 +58,17 @@ export default function Wallet() {
     setIsProcessingPay(true);
 
     try {
-      // 1. Call Backend Order API to create a pending payment transaction
-      const res = await fetch(`${API_URL}/payments/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          amount: amt,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setActiveOrder(data);
-        setShowUpiModal(true);
-        setPaymentSuccess(false);
+      const res = await depositCash(amt);
+      if (res.success) {
+        setDepositAmount('');
+        fetchLedger();
       } else {
-        setLedgerError(data.message || 'Order creation failed');
+        setLedgerError(res.message || 'Deposit failed');
       }
     } catch (err: any) {
       setLedgerError(err.message || 'Server connection failed');
     } finally {
       setIsProcessingPay(false);
-    }
-  };
-
-  const handleSimulatedPayment = async () => {
-    if (!activeOrder) return;
-    setIsProcessingPay(true);
-    setLedgerError(null);
-
-    try {
-      // 1. Request the cryptographic Webhook payload (HMAC SHA256)
-      const simRes = await fetch(`${API_URL}/payments/simulate-webhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: activeOrder.orderId,
-          amount: parseFloat(depositAmount),
-          userId,
-        }),
-      });
-
-      const simData = await simRes.json();
-      if (!simRes.ok) throw new Error('Simulation payload generation failed');
-
-      // 2. Deliver the cryptographically signed Webhook to the webhook receiver!
-      const webhookRes = await fetch(`${API_URL}/payments/webhook`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-razorpay-signature': simData.signature, // Cryptographic header!
-        },
-        body: JSON.stringify(simData.payload),
-      });
-
-      const webhookResult = await webhookRes.json();
-      if (!webhookRes.ok) {
-        throw new Error(webhookResult.message || 'Webhook verification failed');
-      }
-
-      // Simulate a network response latency
-      setTimeout(() => {
-        setIsProcessingPay(false);
-        setPaymentSuccess(true);
-        fetchLedger(); // refresh local ledger table
-        
-        setTimeout(() => {
-          setShowUpiModal(false);
-          setPaymentSuccess(false);
-          setActiveOrder(null);
-        }, 2200);
-      }, 1500);
-
-    } catch (err: any) {
-      setIsProcessingPay(false);
-      setLedgerError(err.message || 'Simulated payment processing failed');
-      setShowUpiModal(false);
     }
   };
 
@@ -210,7 +139,7 @@ export default function Wallet() {
                 <ArrowDownLeft className="w-5 h-5 text-brand-yes" /> Add Capital (Sandbox UPI)
               </h4>
 
-              <form onSubmit={handleDepositClick} className="space-y-4">
+              <form onSubmit={handleDepositSubmit} className="space-y-4">
                 <div>
                   <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-1.5">
                     Deposit Amount (INR)
@@ -248,9 +177,7 @@ export default function Wallet() {
                   {isProcessingPay ? (
                     <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
                   ) : (
-                    <>
-                      <QrCode className="w-4 h-4" /> GENERATE SANDBOX QR
-                    </>
+                    'ADD FUNDS INSTANTLY'
                   )}
                 </button>
               </form>
@@ -363,79 +290,6 @@ export default function Wallet() {
           </div>
         </main>
       </div>
-
-      {/* 3. Sandbox UPI Checkout Modal */}
-      {showUpiModal && activeOrder && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-5">
-          <div className="bg-[#121620] border border-border rounded-3xl p-6 max-w-sm w-full text-center relative overflow-hidden animate-fade-in space-y-5 shadow-2xl">
-            
-            <div>
-              <h3 className="font-heading font-black text-lg text-white">Sandbox UPI Gateway</h3>
-              <p className="text-[10px] text-gray-500 font-semibold mt-1">Cryptographic Webhook Loop Simulator</p>
-            </div>
-
-            {/* QR Mockup Canvas */}
-            <div className="w-52 h-52 bg-white rounded-2xl mx-auto flex items-center justify-center p-3 relative shadow-inner">
-              <div className="absolute inset-0 bg-[#000]/5 flex items-center justify-center rounded-2xl pointer-events-none"></div>
-              <div className="text-center text-black">
-                <QrCode className="w-36 h-36 mx-auto text-black" />
-                <p className="text-[9px] font-black tracking-wide mt-2">BHARATPREDICT MOCK MERCHANT</p>
-              </div>
-            </div>
-
-            {/* Price tag */}
-            <div>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Deposit Capital</p>
-              <h4 className="text-3xl font-black text-white font-heading mt-1">
-                ₹{parseFloat(depositAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </h4>
-              <p className="text-[9px] font-mono text-gray-500 mt-1 truncate">ID: {activeOrder.orderId}</p>
-            </div>
-
-            {/* Control buttons */}
-            <div className="space-y-2">
-              {paymentSuccess ? (
-                <div className="py-3 rounded-xl bg-brand-yesMuted border border-brand-yes/30 flex items-center justify-center gap-1.5 text-xs text-brand-yes font-bold">
-                  <CheckCircle2 className="w-5 h-5 animate-bounce" /> WEBHOOK SECURED & SETTLED
-                </div>
-              ) : (
-                <button
-                  onClick={handleSimulatedPayment}
-                  disabled={isProcessingPay}
-                  className="w-full py-3.5 rounded-xl bg-brand-yes hover:bg-green-600 text-white font-extrabold uppercase tracking-wide text-xs shadow-glow transition-all duration-200 flex items-center justify-center gap-1.5"
-                >
-                  {isProcessingPay ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
-                      SIGNING WEBHOOK SIGNATURE...
-                    </>
-                  ) : (
-                    'SIMULATE SIGNED PAYMENT'
-                  )}
-                </button>
-              )}
-              
-              <button
-                type="button"
-                onClick={() => {
-                  setShowUpiModal(false);
-                  setActiveOrder(null);
-                }}
-                disabled={isProcessingPay}
-                className="w-full py-3.5 rounded-xl bg-[#0b0e14] hover:bg-[#181d2a] border border-border text-gray-400 hover:text-white font-bold text-xs transition-all duration-200"
-              >
-                CANCEL DEPOSIT
-              </button>
-            </div>
-
-            <div className="text-[9px] text-gray-500 font-semibold pt-1 border-t border-border/40 text-left space-y-1">
-              <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-brand-yes" /> Verifies standard HMAC SHA256 signatures.</span>
-              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-brand-accent" /> Wallet balance updates via real-time WebSocket.</span>
-            </div>
-            
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -15,11 +15,12 @@ import {
   History,
   Activity,
   Users,
-  Award
+  Award,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function Portfolio() {
-  const { init, portfolio, activeCopyRelations, fetchCopyRelations } = useWallet();
+  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError } = useWallet();
   const [activeTab, setActiveTab] = useState<'positions' | 'history' | 'copying'>('positions');
 
   useEffect(() => {
@@ -32,6 +33,34 @@ export default function Portfolio() {
 
     return () => clearInterval(interval);
   }, []);
+
+  if (portfolioError) {
+    return (
+      <div className="min-h-screen bg-[#0b0e14] text-foreground flex">
+        <Sidebar />
+        <div className="flex-1 md:pl-64 pb-24 md:pb-8 flex flex-col">
+          <MobileHeader />
+          <main className="flex-1 p-5 md:p-8 max-w-7xl mx-auto w-full flex items-center justify-center min-h-[70vh]">
+            <div className="bg-[#121620] border border-brand-no/30 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+              <div className="w-12 h-12 rounded-full bg-brand-no/10 border border-brand-no/20 flex items-center justify-center text-brand-no mx-auto">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="font-heading font-black text-lg text-white">Sync Failed</h3>
+              <p className="text-xs text-gray-400 leading-relaxed font-semibold">
+                {portfolioError}
+              </p>
+              <button
+                onClick={() => init()}
+                className="px-6 py-2.5 rounded-xl bg-brand-accent hover:bg-blue-600 text-white text-xs font-bold transition-all duration-200"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   if (!portfolio) {
     return (

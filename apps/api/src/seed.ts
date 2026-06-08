@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { SYSTEM_USER_ID } from '@bharatpredict/types';
 
 const prisma = new PrismaClient();
 
@@ -19,13 +20,70 @@ async function main() {
   console.log('Creating primary mock user...');
   const user = await prisma.user.create({
     data: {
-      id: 'anshuman-user-uuid',
+      id: SYSTEM_USER_ID,
       username: 'Anshuman',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
       walletBalance: 25000.00, // ₹25,000.00 starting balance
     },
   });
   console.log(`Mock user created: ${user.username} with wallet balance: ₹${user.walletBalance}`);
+
+  // Create mock leader users for copy trading
+  console.log('Creating mock leader users...');
+  const leadersData = [
+    {
+      id: 'amit-verma-uuid',
+      username: 'Amit Verma',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 50000.00,
+    },
+    {
+      id: 'prerna-kapoor-uuid',
+      username: 'Prerna Kapoor',
+      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 45000.00,
+    },
+    {
+      id: 'rajesh-nair-uuid',
+      username: 'Rajesh Nair',
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 30000.00,
+    },
+    {
+      id: 'siddharth-sen-uuid',
+      username: 'Siddharth Sen',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 20000.00,
+    },
+    {
+      id: 'neha-sharma-uuid',
+      username: 'Neha Sharma',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 22000.00,
+    },
+    {
+      id: 'vikram-mehta-uuid',
+      username: 'Vikram Mehta',
+      avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 18000.00,
+    },
+    {
+      id: 'ananya-roy-uuid',
+      username: 'Ananya Roy',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 15000.00,
+    },
+    {
+      id: 'kunal-patil-uuid',
+      username: 'Kunal Patil',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
+      walletBalance: 12000.00,
+    },
+  ];
+
+  for (const leader of leadersData) {
+    await prisma.user.create({ data: leader });
+  }
 
   // 3. Create high-fidelity Indian prediction markets
   console.log('Seeding prediction markets...');
@@ -119,7 +177,7 @@ async function main() {
       await prisma.comment.create({
         data: {
           marketId: m.id,
-          userId: 'anshuman-user-uuid',
+          userId: SYSTEM_USER_ID,
           text,
           createdAt: new Date(Date.now() - i * 4 * 60 * 60 * 1000), // staggered hours
         },

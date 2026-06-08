@@ -22,8 +22,9 @@ async function bootstrap() {
   );
 
   // Enable CORS for frontend connection
+  const allowedOrigins = config.ALLOWED_ORIGIN.split(',').map((origin) => origin.trim());
   app.enableCors({
-    origin: '*',
+    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     credentials: true,
   });
 

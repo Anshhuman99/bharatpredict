@@ -5,6 +5,7 @@ export const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().optional(),
   REDIS_URL: z.string().optional(),
+  ALLOWED_ORIGIN: z.string().default('http://localhost:3050,http://localhost:3000'),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
