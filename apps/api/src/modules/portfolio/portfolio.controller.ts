@@ -9,11 +9,7 @@ export class PortfolioController {
   @Get()
   @UseGuards(AuthGuard)
   async getPortfolio(@Req() req: any) {
-    return {
-      success: true,
-      data: await this.portfolioService.getPortfolio(req.user.id),
-      error: null
-    };
+    return await this.portfolioService.getPortfolio(req.user.id);
   }
 }
 
