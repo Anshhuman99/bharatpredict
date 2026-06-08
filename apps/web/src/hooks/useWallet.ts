@@ -23,6 +23,7 @@ interface WalletState {
   fetchPortfolio: () => Promise<void>;
   fetchCopyRelations: () => Promise<void>;
   executeTrade: (marketId: string, side: 'YES' | 'NO', amount: number) => Promise<any>;
+  executeSell: (marketId: string, side: 'YES' | 'NO', shares: number) => Promise<any>;
   depositCash: (amount: number) => Promise<any>;
   withdrawCash: (amount: number) => Promise<any>;
   startCopyTrading: (leaderId: string, allocated: number) => Promise<any>;
@@ -171,6 +172,38 @@ export const useWallet = create<WalletState>((set, get) => ({
       return { success: true, ...data };
     } catch (e: any) {
       console.error('Trade execution failed:', e);
+      return { success: false, message: e.message };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  executeSell: async (marketId: string, side: 'YES' | 'NO', shares: number) => {
+    set({ isLoading: true });
+    try {
+      const res = await fetch(`${API_URL}/trade/sell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: USER_ID,
+          marketId,
+          side,
+          shares,
+        }),
+      });
+
+      const payload = await res.json();
+      const data = payload.success ? payload.data : payload;
+      if (!res.ok) {
+        throw new Error(payload.error?.message || payload.message || 'Sell failed');
+      }
+
+      await get().fetchPortfolio();
+      await get().fetchMarkets();
+
+      return { success: true, ...data };
+    } catch (e: any) {
+      console.error('Sell execution failed:', e);
       return { success: false, message: e.message };
     } finally {
       set({ isLoading: false });

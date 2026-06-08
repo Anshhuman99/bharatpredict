@@ -50,7 +50,7 @@ export interface Holding {
 export interface Transaction {
   id: string;
   userId: string;
-  type: 'DEPOSIT' | 'WITHDRAW' | 'BUY_YES' | 'BUY_NO' | 'SETTLEMENT';
+  type: 'DEPOSIT' | 'WITHDRAW' | 'BUY_YES' | 'BUY_NO' | 'SELL_YES' | 'SELL_NO' | 'SETTLEMENT';
   amount: number;
   status: 'PENDING' | 'SUCCESS' | 'FAILED';
   createdAt: Date | string;
@@ -63,9 +63,23 @@ export interface TradeRequestDto {
   amount: number; // INR cash amount
 }
 
+export interface SellRequestDto {
+  userId: string;
+  marketId: string;
+  side: 'YES' | 'NO'; // which shares to sell
+  shares: number;     // exact number of shares to sell back to AMM
+}
+
 export interface WalletTransactionRequestDto {
   userId: string;
   amount: number;
+}
+
+export interface PortfolioHolding extends Holding {
+  market: Market & { yesPrice: number; noPrice: number };
+  currentValue: number;
+  costBasis: number;      // total INR spent buying these shares
+  unrealizedPnL: number; // currentValue - costBasis
 }
 
 export interface PortfolioSummary {
@@ -74,7 +88,7 @@ export interface PortfolioSummary {
   netWorth: number;
   totalPnL: number;
   winRate: number;
-  holdings: Array<Holding & { market: Market }>;
+  holdings: PortfolioHolding[];
   recentTrades: Trade[];
 }
 

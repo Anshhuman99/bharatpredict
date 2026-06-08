@@ -164,4 +164,58 @@ export class LMSR {
       slippage,
     };
   }
+
+  /**
+   * Calculate how much cash (INR) a user receives for selling `sharesToSell` shares back to the AMM.
+   * Uses the reverse LMSR cost function:
+   *   cash_out = C(q1, q2, b) - C(q1 - Δs, q2, b)   [for YES shares]
+   *   cash_out = C(q1, q2, b) - C(q1, q2 - Δs, b)   [for NO shares]
+   *
+   * A 1% platform fee is deducted from the gross cash_out.
+   */
+  static calculateSellCashOut(
+    q1: number,
+    q2: number,
+    b: number,
+    sharesToSell: number,
+    side: 'YES' | 'NO',
+    feePercent: number = 0.01,
+  ): { cashReceived: number; fee: number; netCash: number; avgSellPrice: number; slippage: number } {
+    if (sharesToSell <= 0) {
+      return { cashReceived: 0, fee: 0, netCash: 0, avgSellPrice: 0, slippage: 0 };
+    }
+
+    const initialCost = this.calculateCost(q1, q2, b);
+    let finalCost: number;
+
+    if (side === 'YES') {
+      // After selling, q1 decreases
+      const newQ1 = Math.max(0, q1 - sharesToSell);
+      finalCost = this.calculateCost(newQ1, q2, b);
+    } else {
+      // After selling, q2 decreases
+      const newQ2 = Math.max(0, q2 - sharesToSell);
+      finalCost = this.calculateCost(q1, newQ2, b);
+    }
+
+    const cashReceived = initialCost - finalCost;
+    if (cashReceived <= 0 || isNaN(cashReceived) || !isFinite(cashReceived)) {
+      return { cashReceived: 0, fee: 0, netCash: 0, avgSellPrice: 0, slippage: 0 };
+    }
+
+    const fee = cashReceived * feePercent;
+    const netCash = cashReceived - fee;
+    const avgSellPrice = cashReceived / sharesToSell;
+    const spotPrice = side === 'YES' ? this.getYesPrice(q1, q2, b) : this.getNoPrice(q1, q2, b);
+    // Negative slippage = selling below spot (expected), positive = selling above (unusual)
+    const slippage = spotPrice > 0 ? (spotPrice - avgSellPrice) / spotPrice : 0;
+
+    return {
+      cashReceived,
+      fee,
+      netCash,
+      avgSellPrice,
+      slippage: Math.max(0, slippage), // Only report unfavourable slippage
+    };
+  }
 }
