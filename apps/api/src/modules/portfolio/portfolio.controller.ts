@@ -1,12 +1,19 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { PortfolioService } from './portfolio.service';
+import { AuthGuard } from '../auth/auth.guard';
 
 @Controller('portfolio')
 export class PortfolioController {
   constructor(private readonly portfolioService: PortfolioService) {}
 
   @Get()
-  async getPortfolio(@Query('userId') userId: string) {
-    return await this.portfolioService.getPortfolio(userId);
+  @UseGuards(AuthGuard)
+  async getPortfolio(@Req() req: any) {
+    return {
+      success: true,
+      data: await this.portfolioService.getPortfolio(req.user.id),
+      error: null
+    };
   }
 }
+

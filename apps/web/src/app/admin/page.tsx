@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import MobileHeader from '../../components/MobileHeader';
 import { useWallet } from '../../hooks/useWallet';
+import { useRouter } from 'next/navigation';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -20,7 +21,8 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const { init, markets, fetchMarkets } = useWallet();
+  const { init, markets, fetchMarkets, isAuthenticated, isInitialized, token } = useWallet();
+  const router = useRouter();
 
   // Active form states for creating markets
   const [title, setTitle] = useState('');
@@ -47,9 +49,12 @@ export default function AdminDashboard() {
   const [alerts, setAlerts] = useState<any[]>([]);
 
   const fetchRiskTelemetry = async () => {
+    if (!token) return;
     try {
       const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
-      const res = await fetch(`${API_URL}/admin/trades`);
+      const res = await fetch(`${API_URL}/admin/trades`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const payload = await res.json();
         if (payload.success && payload.data) {
@@ -64,18 +69,29 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     init();
-    fetchRiskTelemetry();
+  }, []);
 
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      router.push('/login');
+    } else if (isAuthenticated) {
+      fetchRiskTelemetry();
+    }
+  }, [isInitialized, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     const timer = setInterval(() => {
       fetchMarkets();
       fetchRiskTelemetry();
     }, 5000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [isAuthenticated]);
 
   const handleCreateMarket = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return;
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(null);
@@ -90,7 +106,10 @@ export default function AdminDashboard() {
       const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
       const res = await fetch(`${API_URL}/admin/markets`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           title,
           description,
@@ -124,6 +143,7 @@ export default function AdminDashboard() {
   };
 
   const handleResolveMarket = async (marketId: string, outcome: 'YES' | 'NO') => {
+    if (!token) return;
     setIsResolving(marketId);
     setResolveSuccess(null);
 
@@ -131,7 +151,10 @@ export default function AdminDashboard() {
       const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050') + '/api/v1';
       const res = await fetch(`${API_URL}/admin/markets/${marketId}/resolve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ outcome }),
       });
 

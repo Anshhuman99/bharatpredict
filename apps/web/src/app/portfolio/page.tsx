@@ -6,6 +6,7 @@ import Sidebar from '../../components/Sidebar';
 import MobileHeader from '../../components/MobileHeader';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { useRouter } from 'next/navigation';
 import {
   PieChart,
   TrendingUp,
@@ -24,7 +25,8 @@ import {
 } from 'lucide-react';
 
 export default function Portfolio() {
-  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError, executeSell } = useWallet();
+  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError, executeSell, isAuthenticated, isInitialized, token } = useWallet();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'positions' | 'history' | 'copying'>('positions');
 
   // Sell panel state
@@ -38,10 +40,19 @@ export default function Portfolio() {
 
   const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
   const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
-  const USER_ID = 'anshuman-user-uuid';
 
   useEffect(() => {
     init();
+  }, []);
+
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isInitialized, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     const interval = setInterval(() => {
       fetchCopyRelations();
     }, 4000);
@@ -58,7 +69,8 @@ export default function Portfolio() {
       try {
         setSellPreviewError(null);
         const res = await fetch(
-          `${API_URL}/trade/sell-preview?marketId=${activeSellHolding}&userId=${USER_ID}&side=${sellSideForHolding}&shares=${sellSharesInput}`
+          `${API_URL}/trade/sell-preview?marketId=${activeSellHolding}&side=${sellSideForHolding}&shares=${sellSharesInput}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
         );
         if (res.ok) {
           const payload = await res.json();

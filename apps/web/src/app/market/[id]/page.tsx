@@ -65,7 +65,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const searchParams = useSearchParams();
   const initialSide = searchParams.get('side') === 'NO' ? 'NO' : 'YES';
 
-  const { executeTrade, executeSell, socket, init, userId, username, avatar } = useWallet();
+  const { executeTrade, executeSell, socket, init, userId, username, avatar, isAuthenticated, token } = useWallet();
   const [market, setMarket] = useState<any>(null);
 
   // ── BUY state ──
@@ -115,7 +115,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
     fetchDetails();
     const timer = setInterval(fetchDetails, 4000);
     return () => clearInterval(timer);
-  }, [marketId]);
+  }, []);
 
   // WebSocket — new comments
   useEffect(() => {
@@ -165,10 +165,15 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
     if (isNaN(shares) || shares <= 0) { setSellPreview(null); return; }
 
     const timer = setTimeout(async () => {
+      if (!isAuthenticated || !token) {
+        setSellPreview(null);
+        return;
+      }
       try {
         setSellPreviewError(null);
         const res = await fetch(
-          `${API_URL}/trade/sell-preview?marketId=${marketId}&userId=${userId}&side=${sellSide}&shares=${sellShares}`
+          `${API_URL}/trade/sell-preview?marketId=${marketId}&side=${sellSide}&shares=${sellShares}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
         );
         if (res.ok) {
           const payload = await res.json();
@@ -184,7 +189,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [sellShares, sellSide, marketId, market, userId]);
+  }, [sellShares, sellSide, marketId, market, token, isAuthenticated]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Handlers
@@ -232,13 +237,16 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommentText.trim()) return;
+    if (!newCommentText.trim() || !token) return;
     setIsSubmittingComment(true);
     try {
       const res = await fetch(`${API_URL}/markets/${marketId}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, text: newCommentText }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ text: newCommentText }),
       });
       if (res.ok) {
         const payload = await res.json();
@@ -425,15 +433,24 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                   <p className="text-[10px] text-gray-500 mt-0.5">Real-time debate and opinion sharing on this outcome</p>
                 </div>
 
-                <form onSubmit={handleCommentSubmit} className="flex gap-3">
-                  <input type="text" placeholder="Back your claims. Share your insights..."
-                    value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)}
-                    className="flex-1 bg-[#0b0e14] border border-border focus:border-brand-accent/50 outline-none rounded-xl px-4 py-3 text-xs text-white" />
-                  <button type="submit" disabled={isSubmittingComment || !newCommentText.trim()}
-                    className="bg-brand-accent hover:bg-blue-600 disabled:bg-gray-700 text-white px-5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors duration-200">
-                    <Send className="w-3.5 h-3.5" /> Post
-                  </button>
-                </form>
+                {isAuthenticated ? (
+                  <form onSubmit={handleCommentSubmit} className="flex gap-3">
+                    <input type="text" placeholder="Back your claims. Share your insights..."
+                      value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)}
+                      className="flex-1 bg-[#0b0e14] border border-border focus:border-brand-accent/50 outline-none rounded-xl px-4 py-3 text-xs text-white" />
+                    <button type="submit" disabled={isSubmittingComment || !newCommentText.trim()}
+                      className="bg-brand-accent hover:bg-blue-600 disabled:bg-gray-700 text-white px-5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors duration-200">
+                      <Send className="w-3.5 h-3.5" /> Post
+                    </button>
+                  </form>
+                ) : (
+                  <div className="bg-[#0b0e14] border border-border/40 rounded-2xl p-5 text-center">
+                    <p className="text-xs text-gray-400 font-semibold mb-3">Sign in to join the conversation and share your insights!</p>
+                    <Link href="/login" className="inline-block px-5 py-2.5 bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-glow">
+                      Join Discussion
+                    </Link>
+                  </div>
+                )}
 
                 <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
                   {comments.length === 0 ? (
@@ -579,12 +596,19 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                             </div>
                           )}
 
-                          <button type="submit" disabled={isSubmitting || !cashAmount || parseFloat(cashAmount) <= 0}
-                            className={`w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white shadow-glow transition-all duration-200 ${
-                              tradeSide === 'YES' ? 'bg-brand-yes hover:bg-green-600' : 'bg-brand-no hover:bg-red-600'
-                            } disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed`}>
-                            {isSubmitting ? 'Verifying with AMM...' : `CONFIRM BUY ${tradeSide}`}
-                          </button>
+                          {isAuthenticated ? (
+                            <button type="submit" disabled={isSubmitting || !cashAmount || parseFloat(cashAmount) <= 0}
+                              className={`w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white shadow-glow transition-all duration-200 ${
+                                tradeSide === 'YES' ? 'bg-brand-yes hover:bg-green-600' : 'bg-brand-no hover:bg-red-600'
+                              } disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed`}>
+                              {isSubmitting ? 'Verifying with AMM...' : `CONFIRM BUY ${tradeSide}`}
+                            </button>
+                          ) : (
+                            <Link href="/login"
+                              className="w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white bg-brand-accent hover:bg-brand-accent/90 block text-center shadow-glow transition-all duration-200">
+                              SIGN IN TO PLACE TRADE
+                            </Link>
+                          )}
                         </form>
                       </>
                     )}
@@ -672,10 +696,17 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                             </div>
                           )}
 
-                          <button type="submit" disabled={isSelling || !sellShares || parseFloat(sellShares) <= 0}
-                            className="w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white bg-orange-500 hover:bg-orange-600 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-all duration-200">
-                            {isSelling ? 'Processing Exit...' : `SELL ${sellSide} SHARES`}
-                          </button>
+                          {isAuthenticated ? (
+                            <button type="submit" disabled={isSelling || !sellShares || parseFloat(sellShares) <= 0}
+                              className="w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white bg-orange-500 hover:bg-orange-600 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-all duration-200">
+                              {isSelling ? 'Processing Exit...' : `SELL ${sellSide} SHARES`}
+                            </button>
+                          ) : (
+                            <Link href="/login"
+                              className="w-full py-4 rounded-xl text-xs font-extrabold uppercase tracking-wider text-white bg-brand-accent hover:bg-brand-accent/90 block text-center shadow-glow transition-all duration-200">
+                              SIGN IN TO PLACE TRADE
+                            </Link>
+                          )}
                         </form>
                       </>
                     )}

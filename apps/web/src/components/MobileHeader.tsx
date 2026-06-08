@@ -8,7 +8,7 @@ import { useState } from 'react';
 
 export default function MobileHeader() {
   const pathname = usePathname();
-  const { walletBalance } = useWallet();
+  const { walletBalance, isAuthenticated } = useWallet();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -25,9 +25,15 @@ export default function MobileHeader() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Link href="/wallet" className="bg-[#121620] border border-border px-3 py-1.5 rounded-xl text-xs font-bold text-white">
-            ₹{walletBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-          </Link>
+          {isAuthenticated ? (
+            <Link href="/wallet" className="bg-[#121620] border border-border px-3 py-1.5 rounded-xl text-xs font-bold text-white">
+              ₹{walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+            </Link>
+          ) : (
+            <Link href="/login" className="bg-brand-accent text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-glow uppercase tracking-wider text-[10px]">
+              Sign In
+            </Link>
+          )}
         </div>
       </header>
 

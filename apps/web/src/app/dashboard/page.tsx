@@ -5,7 +5,7 @@ import { useWallet } from '../../hooks/useWallet';
 import Sidebar from '../../components/Sidebar';
 import MobileHeader from '../../components/MobileHeader';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import MarketCard from '../../components/MarketCard';
 import SkeletonLoader from '../../components/SkeletonLoader';
@@ -31,8 +31,9 @@ import {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const catFilter = searchParams.get('cat') || '';
-  const { markets, init, globalTrades, fetchMarkets, executeTrade } = useWallet();
+  const { markets, init, globalTrades, fetchMarkets, executeTrade, isAuthenticated } = useWallet();
   
   const [activeTab, setActiveTab] = useState<'trending' | 'live' | 'ending' | 'new'>('trending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +72,10 @@ function DashboardContent() {
 
   // Quick trade execution for Featured Spotlight
   const handleQuickTrade = async (marketId: string, side: 'YES' | 'NO', amount: number) => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
     setFeaturedSubmitting(true);
     setFeaturedSuccess(null);
     const res = await executeTrade(marketId, side, amount);

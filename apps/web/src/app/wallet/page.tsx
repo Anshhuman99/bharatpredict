@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useWallet } from '../../hooks/useWallet';
 import Sidebar from '../../components/Sidebar';
 import MobileHeader from '../../components/MobileHeader';
+import { useRouter } from 'next/navigation';
 import {
   Wallet as WalletIcon,
   ArrowDownLeft,
@@ -20,7 +21,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
 
 export default function Wallet() {
-  const { init, walletBalance, depositCash, withdrawCash, userId } = useWallet();
+  const { init, walletBalance, depositCash, withdrawCash, userId, isAuthenticated, isInitialized, token } = useWallet();
+  const router = useRouter();
   const [walletDetails, setWalletDetails] = useState<any>(null);
 
   const [depositAmount, setDepositAmount] = useState<string>('1000');
@@ -31,8 +33,11 @@ export default function Wallet() {
   const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   const fetchLedger = async () => {
+    if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/wallet?userId=${userId}`);
+      const res = await fetch(`${API_URL}/wallet`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         setWalletDetails(data);
@@ -44,8 +49,15 @@ export default function Wallet() {
 
   useEffect(() => {
     init();
-    fetchLedger();
   }, []);
+
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) {
+      router.push('/login');
+    } else if (isAuthenticated) {
+      fetchLedger();
+    }
+  }, [isInitialized, isAuthenticated, router]);
 
   const handleDepositSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

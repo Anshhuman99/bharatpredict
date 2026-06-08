@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { CommentRequestDto } from '@bharatpredict/types';
+import { AuthGuard } from '../auth/auth.guard';
 
 @Controller('markets')
 export class CommentsController {
@@ -12,14 +13,17 @@ export class CommentsController {
   }
 
   @Post(':id/comments')
+  @UseGuards(AuthGuard)
   async createComment(
     @Param('id') id: string,
     @Body() dto: Omit<CommentRequestDto, 'marketId'>,
+    @Req() req: any
   ) {
     return await this.commentsService.createComment({
       marketId: id,
-      userId: dto.userId,
+      userId: req.user.id,
       text: dto.text,
     });
   }
 }
+

@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
-import { Market, PortfolioSummary, Trade, SYSTEM_USER_ID } from '@bharatpredict/types';
+import { Market, PortfolioSummary, Trade } from '@bharatpredict/types';
 
 interface WalletState {
-  userId: string;
-  username: string;
-  avatar: string;
+  token: string | null;
+  userId: string | null;
+  username: string | null;
+  avatar: string | null;
   walletBalance: number;
   portfolio: PortfolioSummary | null;
   markets: Market[];
@@ -16,6 +17,7 @@ interface WalletState {
   isLoading: boolean;
   portfolioError: string | null;
   isInitialized: boolean;
+  isAuthenticated: boolean;
   
   // Actions
   init: () => Promise<void>;
@@ -28,17 +30,22 @@ interface WalletState {
   withdrawCash: (amount: number) => Promise<any>;
   startCopyTrading: (leaderId: string, allocated: number) => Promise<any>;
   addGlobalTrade: (trade: any) => void;
+  
+  // Auth Actions
+  signup: (username: string) => Promise<any>;
+  login: (username: string, passphrase: string) => Promise<any>;
+  logout: () => Promise<void>;
 }
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
-const USER_ID = SYSTEM_USER_ID; // Match UUID seeded in backend database
 
 export const useWallet = create<WalletState>((set, get) => ({
-  userId: USER_ID,
-  username: 'Anshuman',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-  walletBalance: 25000.00,
+  token: null,
+  userId: null,
+  username: null,
+  avatar: null,
+  walletBalance: 0,
   portfolio: null,
   markets: [],
   globalTrades: [],
@@ -48,6 +55,7 @@ export const useWallet = create<WalletState>((set, get) => ({
   isLoading: false,
   portfolioError: null,
   isInitialized: false,
+  isAuthenticated: false,
 
   init: async () => {
     if (get().isInitialized) {
@@ -56,16 +64,47 @@ export const useWallet = create<WalletState>((set, get) => ({
 
     set({ isLoading: true });
 
-    // 1. Initial REST loads
+    // 1. Load token from localStorage
+    const savedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    // Always fetch public markets
     await get().fetchMarkets();
-    await get().fetchPortfolio();
-    await get().fetchCopyRelations();
 
-    if (!get().portfolioError) {
-      set({ isInitialized: true });
+    if (savedToken) {
+      try {
+        const res = await fetch(`${API_URL}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${savedToken}` }
+        });
+
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload.success) {
+            const user = payload.data;
+            set({
+              token: savedToken,
+              userId: user.id,
+              username: user.username,
+              avatar: user.avatar,
+              walletBalance: user.walletBalance,
+              isAuthenticated: true,
+            });
+
+            // Fetch user specific data
+            await get().fetchPortfolio();
+            await get().fetchCopyRelations();
+          } else {
+            // Token invalid or expired
+            if (typeof window !== 'undefined') localStorage.removeItem('auth_token');
+          }
+        } else {
+          if (typeof window !== 'undefined') localStorage.removeItem('auth_token');
+        }
+      } catch (e) {
+        console.error('Failed to validate session during init:', e);
+      }
     }
 
-    set({ isLoading: false });
+    set({ isInitialized: true, isLoading: false });
 
     // 2. Connect WebSocket for real-time tickers
     if (!get().socket) {
@@ -86,15 +125,158 @@ export const useWallet = create<WalletState>((set, get) => ({
         get().addGlobalTrade(trade);
       });
 
-      // Handle direct real-time wallet update broadcasts
-      socket.on(`wallet_${USER_ID}`, (data: { balance: number }) => {
-        set({ walletBalance: data.balance });
-        get().fetchPortfolio(); // Refresh portfolio summary on wallet credit/debit
-        get().fetchCopyRelations(); // Refresh copy relations on passive gains
-      });
+      // Listen for dynamic wallet updates if authenticated
+      const currentUserId = get().userId;
+      if (currentUserId) {
+        socket.on(`wallet_${currentUserId}`, (data: { balance: number }) => {
+          set({ walletBalance: data.balance });
+          get().fetchPortfolio(); // Refresh portfolio
+          get().fetchCopyRelations(); // Refresh copy relations
+        });
+      }
 
       set({ socket });
     }
+  },
+
+  signup: async (username: string) => {
+    set({ isLoading: true });
+    try {
+      const res = await fetch(`${API_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.message || 'Signup failed');
+      }
+
+      const { user, token, passphrase } = payload.data;
+      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_token', token);
+      }
+
+      set({
+        token,
+        userId: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        walletBalance: user.walletBalance,
+        isAuthenticated: true,
+      });
+
+      // Initialize Socket listeners for the new user ID
+      const socket = get().socket;
+      if (socket) {
+        socket.off(`wallet_${user.id}`); // prevent duplicate
+        socket.on(`wallet_${user.id}`, (data: { balance: number }) => {
+          set({ walletBalance: data.balance });
+          get().fetchPortfolio();
+          get().fetchCopyRelations();
+        });
+      }
+
+      await get().fetchPortfolio();
+      await get().fetchCopyRelations();
+
+      return { success: true, passphrase };
+    } catch (e: any) {
+      console.error('Signup failed:', e);
+      return { success: false, message: e.message };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  login: async (username: string, passphrase: string) => {
+    set({ isLoading: true });
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, passphrase }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.message || 'Login failed');
+      }
+
+      const { user, token } = payload.data;
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_token', token);
+      }
+
+      set({
+        token,
+        userId: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        walletBalance: user.walletBalance,
+        isAuthenticated: true,
+      });
+
+      // Bind Socket event for this user
+      const socket = get().socket;
+      if (socket) {
+        socket.off(`wallet_${user.id}`);
+        socket.on(`wallet_${user.id}`, (data: { balance: number }) => {
+          set({ walletBalance: data.balance });
+          get().fetchPortfolio();
+          get().fetchCopyRelations();
+        });
+      }
+
+      await get().fetchPortfolio();
+      await get().fetchCopyRelations();
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Login failed:', e);
+      return { success: false, message: e.message };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  logout: async () => {
+    const token = get().token;
+    if (token) {
+      try {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (e) {
+        console.error('Failed to logout cleanly on backend:', e);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+    }
+
+    // Clean up socket listener
+    const socket = get().socket;
+    const userId = get().userId;
+    if (socket && userId) {
+      socket.off(`wallet_${userId}`);
+    }
+
+    set({
+      token: null,
+      userId: null,
+      username: null,
+      avatar: null,
+      walletBalance: 0,
+      portfolio: null,
+      activeCopyRelations: [],
+      isAuthenticated: false,
+    });
   },
 
   fetchMarkets: async () => {
@@ -111,9 +293,14 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   fetchPortfolio: async () => {
+    const token = get().token;
+    if (!token) return;
+
     try {
       set({ portfolioError: null });
-      const res = await fetch(`${API_URL}/portfolio?userId=${USER_ID}`);
+      const res = await fetch(`${API_URL}/portfolio`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const payload = await res.json();
         const data = payload.success ? payload.data : payload;
@@ -124,7 +311,7 @@ export const useWallet = create<WalletState>((set, get) => ({
         });
       } else {
         const errPayload = await res.json().catch(() => ({}));
-        set({ portfolioError: errPayload.message || 'Failed to fetch portfolio data. Please make sure database is seeded.' });
+        set({ portfolioError: errPayload.message || 'Failed to fetch portfolio data.' });
       }
     } catch (e: any) {
       console.error('Error fetching portfolio:', e);
@@ -133,8 +320,13 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   fetchCopyRelations: async () => {
+    const token = get().token;
+    if (!token) return;
+
     try {
-      const res = await fetch(`${API_URL}/copytrading/active?userId=${USER_ID}`);
+      const res = await fetch(`${API_URL}/copytrading/active`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const payload = await res.json();
         const data = payload.success ? payload.data : payload;
@@ -146,13 +338,20 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   executeTrade: async (marketId: string, side: 'YES' | 'NO', amount: number) => {
+    const token = get().token;
+    if (!token) {
+      return { success: false, message: 'Please login to trade' };
+    }
+
     set({ isLoading: true });
     try {
       const res = await fetch(`${API_URL}/trade`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          userId: USER_ID,
           marketId,
           side,
           amount,
@@ -165,7 +364,6 @@ export const useWallet = create<WalletState>((set, get) => ({
         throw new Error(payload.error?.message || payload.message || 'Trade execution failed');
       }
 
-      // Refresh state locally
       await get().fetchPortfolio();
       await get().fetchMarkets();
 
@@ -179,13 +377,20 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   executeSell: async (marketId: string, side: 'YES' | 'NO', shares: number) => {
+    const token = get().token;
+    if (!token) {
+      return { success: false, message: 'Please login to trade' };
+    }
+
     set({ isLoading: true });
     try {
       const res = await fetch(`${API_URL}/trade/sell`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          userId: USER_ID,
           marketId,
           side,
           shares,
@@ -211,14 +416,17 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   depositCash: async (amount: number) => {
+    const token = get().token;
+    if (!token) return { success: false, message: 'Please login' };
+
     try {
       const res = await fetch(`${API_URL}/wallet/deposit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: USER_ID,
-          amount,
-        }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ amount }),
       });
       const payload = await res.json();
       if (res.ok) {
@@ -232,14 +440,17 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   withdrawCash: async (amount: number) => {
+    const token = get().token;
+    if (!token) return { success: false, message: 'Please login' };
+
     try {
       const res = await fetch(`${API_URL}/wallet/withdraw`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: USER_ID,
-          amount,
-        }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ amount }),
       });
       const payload = await res.json();
       if (res.ok) {
@@ -253,13 +464,18 @@ export const useWallet = create<WalletState>((set, get) => ({
   },
 
   startCopyTrading: async (leaderId: string, allocated: number) => {
+    const token = get().token;
+    if (!token) return { success: false, message: 'Please login' };
+
     set({ isLoading: true });
     try {
       const res = await fetch(`${API_URL}/copytrading/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
-          copierId: USER_ID,
           leaderId,
           allocated,
         }),
@@ -282,13 +498,10 @@ export const useWallet = create<WalletState>((set, get) => ({
 
   addGlobalTrade: (trade: any) => {
     set((state) => {
-      // Keep only last 30 trades in local tickers memory
       const updated = [trade, ...state.globalTrades].slice(0, 30);
       
-      // Also update matching market's current prices in the local state array for instantaneous UI updates
       const updatedMarkets = state.markets.map((m) => {
         if (m.id === trade.marketId) {
-          // Approximate the new price based on trading updates if not fully re-fetched
           return {
             ...m,
             volume: m.volume + trade.amount,

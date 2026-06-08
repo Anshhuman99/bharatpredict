@@ -1,8 +1,10 @@
-import { Controller, Post, Get, Body, Param, Put, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Put, BadRequestException, UseGuards } from '@nestjs/common';
 import { MarketsService } from './markets.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthGuard } from '../auth/auth.guard';
 
 @Controller('admin')
+@UseGuards(AuthGuard)
 export class AdminController {
   constructor(
     private readonly marketsService: MarketsService,
