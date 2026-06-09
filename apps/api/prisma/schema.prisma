@@ -14,13 +14,20 @@ model User {
   role            String                @default("USER")
   avatar          String
   walletBalance   Float                 @default(1000.00)
+  reputationPoints Float                @default(100.00) // Reputation for consensus
   trades          Trade[]
   holdings        Holding[]
   transactions    Transaction[]
   comments        Comment[]
+  commentVotes    CommentVote[]
   copiedRelations CopyTradingRelation[] @relation("CopiedRelations")
   ledRelations    CopyTradingRelation[] @relation("LedRelations")
   sessions        Session[]
+  limitOrders     LimitOrder[]          // For virtual P2P matching
+  redemptions     CouponRedemption[]    // For rewards shop
+  notifications   Notification[]        // For user alerts/notifications
+  achievements    Achievement[]         // For user achievements
+  stats           UserStats?            // For gamification stats
   createdAt       DateTime              @default(now())
 }
 
@@ -53,6 +60,7 @@ model Market {
   trades            Trade[]
   holdings          Holding[]
   comments          Comment[]
+  limitOrders       LimitOrder[]          // For virtual P2P matching
   createdAt         DateTime  @default(now())
 }
 
@@ -92,13 +100,29 @@ model Transaction {
 }
 
 model Comment {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   marketId  String
-  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  market    Market        @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  parentId  String?
+  parent    Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("CommentReplies")
+  votes     CommentVote[]
+  createdAt DateTime      @default(now())
+}
+
+model CommentVote {
+  id        String   @id @default(uuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text      String
+  value     Int      // 1 for upvote, -1 for downvote
   createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
 }
 
 model CopyTradingRelation {
@@ -111,4 +135,62 @@ model CopyTradingRelation {
   profits   Float    @default(0.0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+model LimitOrder {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  marketId   String
+  market     Market   @relation(fields: [marketId], references: [id])
+  side       String   // "YES" or "NO"
+  orderType  String   // "BUY" or "SELL"
+  price      Float    // Virtual tokens per share (0.01 - 0.99)
+  shares     Float    
+  filled     Float    @default(0.0)
+  status     String   // "PENDING", "PARTIAL", "FILLED", "CANCELLED"
+  createdAt  DateTime @default(now())
+}
+
+model CouponRedemption {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  rewardCode   String   // e.g. "AMZN-200-OFF"
+  voucherPin   String   // The active brand voucher pin
+  tokenCost    Float    // Coins spent on redemption
+  createdAt    DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "TRADE", "SETTLEMENT", "MARKET_CLOSING", "COPY_TRADE"
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  metadata  String?  // JSON string containing marketId, tradeId, etc.
+  createdAt DateTime @default(now())
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // "FIRST_TRADE", "STREAK_10", "PROFIT_10K", "IPL_MASTER"
+  unlockedAt  DateTime @default(now())
+}
+
+model UserStats {
+  userId               String    @id
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentStreak        Int       @default(0)
+  longestStreak        Int       @default(0)
+  totalPredictions     Int       @default(0)
+  correctPredictions   Int       @default(0)
+  xp                   Int       @default(0)
+  level                Int       @default(1)
+  lastPredictionDate   String?   // YYYY-MM-DD
+  lastFreeClaimedAt    DateTime? // Daily free prediction token credit timestamp
 }

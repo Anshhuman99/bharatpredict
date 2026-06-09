@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { useWallet } from '../hooks/useWallet';
+import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import {
   TrendingUp,
   Award,
@@ -19,7 +21,7 @@ function SidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const cat = searchParams.get('cat') || '';
-  const { walletBalance, username, avatar, isAuthenticated, logout } = useWallet();
+  const { walletBalance, username, avatar, isAuthenticated, logout, gamificationStats } = useWallet();
 
   const navigationItems = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -44,20 +46,28 @@ function SidebarContent() {
   };
 
   return (
-    <aside className="w-64 border-r border-border bg-[#0b0e14]/90 backdrop-blur-md h-screen fixed left-0 top-0 hidden md:flex flex-col justify-between p-6 z-20">
+    <aside className="w-64 border-r border-border bg-background/90 backdrop-blur-md h-screen fixed left-0 top-0 hidden md:flex flex-col justify-between p-6 z-20">
       <div className="space-y-8">
         {/* Brand Logo Header */}
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-accent to-indigo-600 flex items-center justify-center shadow-glow">
-            <span className="font-heading font-bold text-white text-lg">🇮🇳</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-accent to-indigo-600 flex items-center justify-center shadow-glow">
+              <span className="font-heading font-bold text-white text-lg">🇮🇳</span>
+            </div>
+            <div>
+              <h1 className="font-heading font-bold text-lg leading-tight tracking-wide bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+                BharatPredict
+              </h1>
+              <p className="text-[10px] text-muted tracking-wider uppercase font-semibold">
+                Trade India's Future
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-heading font-bold text-lg leading-tight tracking-wide bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              BharatPredict
-            </h1>
-            <p className="text-[10px] text-muted tracking-wider uppercase font-semibold">
-              Trade India's Future
-            </p>
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
+            {isAuthenticated && (
+              <NotificationBell />
+            )}
           </div>
         </div>
 
@@ -69,7 +79,7 @@ function SidebarContent() {
               <Wallet className="w-3.5 h-3.5 text-brand-accent" /> Available Balance
             </p>
             <h2 className="text-2xl font-bold text-white font-heading">
-              ₹{walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 0 })} BP
             </h2>
             <Link 
               href="/wallet"
@@ -84,7 +94,7 @@ function SidebarContent() {
             <p className="text-xs text-muted font-medium mb-1 flex items-center gap-1.5">
               <Wallet className="w-3.5 h-3.5 text-gray-500" /> Guest Mode
             </p>
-            <p className="text-[11px] text-gray-400 mb-3">Sign in to claim ₹1,000 welcome bonus & start trading.</p>
+            <p className="text-[11px] text-gray-400 mb-3">Sign in to claim 1,000 BP Coins welcome bonus & start trading.</p>
             <Link 
               href="/login"
               className="w-full py-2 px-3 text-center rounded-xl bg-brand-accent text-white font-black text-[10px] uppercase tracking-wider hover:bg-brand-accent/90 transition-all block shadow-glow"
@@ -129,9 +139,16 @@ function SidebarContent() {
             />
             <div className="overflow-hidden">
               <h4 className="text-xs font-bold text-white truncate max-w-[100px]">{username}</h4>
-              <span className="text-[9px] text-brand-accent font-extrabold px-1.5 py-0.5 rounded-full bg-brand-accent/10 border border-brand-accent/20 uppercase tracking-wide">
-                PRO TRADER
-              </span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[9px] text-brand-accent font-extrabold px-1.5 py-0.5 rounded-full bg-brand-accent/10 border border-brand-accent/20 uppercase tracking-wide">
+                  Lvl {gamificationStats?.level || 1}
+                </span>
+                {gamificationStats?.currentStreak > 0 && (
+                  <span className="text-[9px] text-[#ff5722] font-black px-1.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 uppercase tracking-wide flex items-center gap-0.5">
+                    🔥 {gamificationStats.currentStreak}d
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button

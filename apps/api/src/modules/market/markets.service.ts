@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { LMSR } from '../trade/lmsr';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { GamificationService } from '../gamification/gamification.service';
 
 @Injectable()
 export class MarketsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
+    private readonly gamification: GamificationService,
   ) {}
 
   async findAll() {
@@ -117,7 +121,7 @@ export class MarketsService {
   }
 
   async resolveMarket(marketId: string, outcome: 'YES' | 'NO') {
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Fetch market details
       const market = await tx.market.findUnique({
         where: { id: marketId },
@@ -140,9 +144,12 @@ export class MarketsService {
         where: { marketId },
       });
 
+      const notificationsToTrigger: any[] = [];
+
       // 3. Process payouts for each user holding shares
       for (const holding of holdings) {
         const shares = outcome === 'YES' ? holding.yesShares : holding.noShares;
+        const losingShares = outcome === 'YES' ? holding.noShares : holding.yesShares;
         
         if (shares > 0) {
           const payout = shares * 1.0; // Settle at ₹1.00 per share
@@ -154,6 +161,9 @@ export class MarketsService {
               walletBalance: {
                 increment: payout,
               },
+              reputationPoints: {
+                increment: 10.00, // Reward reputation for correct prediction
+              }
             },
           });
 
@@ -169,6 +179,35 @@ export class MarketsService {
 
           // Broadcast wallet update immediately
           this.realtime.broadcastWalletUpdate(holding.userId, updatedUser.walletBalance);
+
+          notificationsToTrigger.push({
+            userId: holding.userId,
+            type: 'SETTLEMENT',
+            title: 'Prediction Won! 🎉',
+            body: `You correctly predicted ${outcome} in '${market.title}'! Payout of ${payout.toFixed(0)} BP and +10 Reputation Score has been credited.`,
+            metadata: { marketId, outcome }
+          });
+        }
+
+        if (losingShares > 0) {
+          // Deduct reputation for incorrect prediction
+          const dbUser = await tx.user.findUnique({ where: { id: holding.userId } });
+          const currentRep = dbUser?.reputationPoints ?? 100.00;
+          const newRep = Math.max(0, currentRep - 5.00);
+          await tx.user.update({
+            where: { id: holding.userId },
+            data: {
+              reputationPoints: newRep,
+            },
+          });
+
+          notificationsToTrigger.push({
+            userId: holding.userId,
+            type: 'SETTLEMENT',
+            title: 'Prediction Resolved',
+            body: `Market '${market.title}' resolved to ${outcome}. Your staked position expired and -5 Reputation Score was applied.`,
+            metadata: { marketId, outcome }
+          });
         }
 
         // Set shares to 0 since they are resolved
@@ -195,8 +234,33 @@ export class MarketsService {
         marketId,
         outcome,
         resolved: true,
+        notificationsToTrigger,
+        participants: holdings.map(h => ({
+          userId: h.userId,
+          won: (outcome === 'YES' ? h.yesShares : h.noShares) > 0,
+        })),
+        category: market.category,
       };
     });
+
+    if (result.success) {
+      for (const notif of result.notificationsToTrigger) {
+        await this.notifications.createNotification(
+          notif.userId,
+          notif.type as any,
+          notif.title,
+          notif.body,
+          notif.metadata
+        );
+      }
+
+      // Record gamification stats for participants
+      for (const p of result.participants) {
+        await this.gamification.recordResolutionActivity(p.userId, p.won, result.category);
+      }
+    }
+
+    return result;
   }
 
   private generatePriceHistory(currentYesPrice: number, startDate: Date) {

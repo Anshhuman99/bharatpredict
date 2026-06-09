@@ -21,13 +21,146 @@ import {
   ArrowDownLeft,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  Flame
 } from 'lucide-react';
 
+const badges = [
+  {
+    type: 'FIRST_TRADE',
+    title: 'First Prediction',
+    requirement: '1 Trade Placed',
+    description: 'Placed your first prediction trade on BharatPredict.',
+  },
+  {
+    type: 'STREAK_10',
+    title: 'Streak Master',
+    requirement: '10-Day Streak',
+    description: 'Successfully reached 10 consecutive prediction days.',
+  },
+  {
+    type: 'PROFIT_10K',
+    title: 'Wealth Builder',
+    requirement: '₹10,000 Realized Profit',
+    description: 'Accumulated ₹10,000 net profits on resolved markets.',
+  },
+  {
+    type: 'IPL_MASTER',
+    title: 'IPL Master',
+    requirement: '80%+ IPL Win Rate',
+    description: 'Achieved an 80%+ win rate across at least 5 resolved IPL markets.',
+  }
+];
+
+const renderBadgeIcon = (type: string, unlocked: boolean) => {
+  const grayscaleClass = unlocked ? '' : 'filter grayscale opacity-40';
+  
+  if (type === 'FIRST_TRADE') {
+    return (
+      <div className={`relative w-20 h-20 mx-auto ${grayscaleClass} flex items-center justify-center`}>
+        {unlocked && (
+          <div className="absolute inset-0 bg-amber-500/10 rounded-full blur-md animate-pulse"></div>
+        )}
+        <svg viewBox="0 0 100 100" className="w-full h-full relative z-10">
+          <defs>
+            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f59e0b" />
+              <stop offset="50%" stopColor="#d97706" />
+              <stop offset="100%" stopColor="#b45309" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="42" fill="url(#goldGrad)" className="drop-shadow-lg" />
+          <circle cx="50" cy="50" r="36" fill="#121620" />
+          <path d="M35 30h30v8c0 5-4 9-9 9h-2v6h5v4h-18v-4h5v-6h-2c-5 0-9-4-9-9v-8zm-5 4v4c0 3.5 2.5 6.5 6 7v-11h-6zm40 0h-6v11c3.5-.5 6-3.5 6-7v-4z" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1" />
+          <path d="M43 67h14l-2 8H45l-2-8z" fill="#f59e0b" />
+          <circle cx="50" cy="38" r="4" fill="#121620" />
+        </svg>
+      </div>
+    );
+  }
+  
+  if (type === 'STREAK_10') {
+    return (
+      <div className={`relative w-20 h-20 mx-auto ${grayscaleClass} flex items-center justify-center`}>
+        {unlocked && (
+          <div className="absolute inset-0 bg-red-500/10 rounded-full blur-md animate-pulse"></div>
+        )}
+        <svg viewBox="0 0 100 100" className="w-full h-full relative z-10">
+          <defs>
+            <linearGradient id="flameGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="50%" stopColor="#f97316" />
+              <stop offset="100%" stopColor="#f59e0b" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="42" fill="url(#flameGrad)" className="drop-shadow-lg" />
+          <circle cx="50" cy="50" r="36" fill="#121620" />
+          <path d="M50 25c-8 10-14 16-14 23 0 7.7 6.3 14 14 14s14-6.3 14-14c0-7-6-13-14-23zm0 32c-4.4 0-8-3.6-8-8 0-4.8 4-8.8 8-12 4 3.2 8 7.2 8 12 0 4.4-3.6 8-8 8z" fill="url(#flameGrad)" />
+        </svg>
+      </div>
+    );
+  }
+  
+  if (type === 'PROFIT_10K') {
+    return (
+      <div className={`relative w-20 h-20 mx-auto ${grayscaleClass} flex items-center justify-center`}>
+        {unlocked && (
+          <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-md animate-pulse"></div>
+        )}
+        <svg viewBox="0 0 100 100" className="w-full h-full relative z-10">
+          <defs>
+            <linearGradient id="wealthGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="50%" stopColor="#059669" />
+              <stop offset="100%" stopColor="#047857" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="42" fill="url(#wealthGrad)" className="drop-shadow-lg" />
+          <circle cx="50" cy="50" r="36" fill="#121620" />
+          <g fill="url(#wealthGrad)">
+            <path d="M36 42c-2 0-3.5 1.5-3.5 3.5V60c0 4.4 3.6 8 8 8h19c4.4 0 8-3.6 8-8V45.5c0-2-1.5-3.5-3.5-3.5H36z" />
+            <path d="M43 38c-3 0-5 2-5 4h24c0-2-2-4-5-4H43z" />
+            <path d="M46 48h8v2.5h-5v1.5h5v2.5h-5v3.5h-3v-3.5h-2v-2.5h2v-1.5h-2V48h2zm3 2.5h2v-1.5h-2v1.5zm0 4h2V52h-2v2.5z" fill="#121620" />
+          </g>
+        </svg>
+      </div>
+    );
+  }
+  
+  if (type === 'IPL_MASTER') {
+    return (
+      <div className={`relative w-20 h-20 mx-auto ${grayscaleClass} flex items-center justify-center`}>
+        {unlocked && (
+          <div className="absolute inset-0 bg-indigo-500/10 rounded-full blur-md animate-pulse"></div>
+        )}
+        <svg viewBox="0 0 100 100" className="w-full h-full relative z-10">
+          <defs>
+            <linearGradient id="iplGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#6366f1" />
+              <stop offset="50%" stopColor="#4f46e5" />
+              <stop offset="100%" stopColor="#3730a3" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="42" fill="url(#iplGrad)" className="drop-shadow-lg" />
+          <circle cx="50" cy="50" r="36" fill="#121620" />
+          <g stroke="url(#iplGrad)" strokeWidth="3.5" fill="none" strokeLinecap="round">
+            <line x1="38" y1="68" x2="60" y2="34" />
+            <line x1="62" y1="68" x2="40" y2="34" />
+          </g>
+          <circle cx="50" cy="42" r="6" fill="#ef4444" />
+          <path d="M48 38.5c1 1.5 1 3.5 0 5M52 38.5c-1 1.5-1 3.5 0 5" stroke="#ffffff" strokeWidth="0.8" fill="none" />
+        </svg>
+      </div>
+    );
+  }
+  
+  return null;
+};
+
 export default function Portfolio() {
-  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError, executeSell, isAuthenticated, isInitialized, token } = useWallet();
+  const { init, portfolio, activeCopyRelations, fetchCopyRelations, portfolioError, executeSell, isAuthenticated, isInitialized, token, gamificationStats, claimDailyFreeBet } = useWallet();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'positions' | 'history' | 'copying'>('positions');
+  const [activeTab, setActiveTab] = useState<'positions' | 'history' | 'copying' | 'gamification'>('positions');
 
   // Sell panel state
   const [activeSellHolding, setActiveSellHolding] = useState<string | null>(null);
@@ -37,6 +170,11 @@ export default function Portfolio() {
   const [sellPreviewError, setSellPreviewError] = useState<string | null>(null);
   const [isSelling, setIsSelling] = useState(false);
   const [sellResult, setSellResult] = useState<any>(null);
+
+  // Gamification state
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimMessage, setClaimMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [timeUntilReset, setTimeUntilReset] = useState<string>('');
 
   const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
   const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
@@ -84,6 +222,54 @@ export default function Portfolio() {
     }, 300);
     return () => clearTimeout(timer);
   }, [sellSharesInput, activeSellHolding, sellSideForHolding]);
+
+  // Reset countdown for daily faucet claim
+  useEffect(() => {
+    if (activeTab !== 'gamification') return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const nowIST = new Date(now.getTime() + istOffset);
+
+      const midnightIST = new Date(nowIST);
+      midnightIST.setUTCHours(24, 0, 0, 0);
+
+      const diffMs = midnightIST.getTime() - nowIST.getTime();
+      if (diffMs <= 0) {
+        setTimeUntilReset('Resets shortly');
+        return;
+      }
+
+      const h = Math.floor(diffMs / (3600 * 1000));
+      const m = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
+      const s = Math.floor((diffMs % (60 * 1000)) / 1000);
+
+      setTimeUntilReset(`${h}h ${m}m ${s}s`);
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [activeTab, gamificationStats?.claimedToday]);
+
+  const handleClaimFaucet = async () => {
+    setIsClaiming(true);
+    setClaimMessage(null);
+    try {
+      const res = await claimDailyFreeBet();
+      if (res.success) {
+        setClaimMessage({ text: '🎉 100 BP successfully credited to your wallet!', type: 'success' });
+        setTimeout(() => setClaimMessage(null), 5000);
+      } else {
+        setClaimMessage({ text: res.message || 'Failed to claim daily faucet.', type: 'error' });
+      }
+    } catch (err: any) {
+      setClaimMessage({ text: err.message || 'Failed to claim daily faucet.', type: 'error' });
+    } finally {
+      setIsClaiming(false);
+    }
+  };
 
   const openSellPanel = (holdingId: string, marketId: string, side: 'YES' | 'NO') => {
     if (activeSellHolding === marketId) {
@@ -318,6 +504,16 @@ export default function Portfolio() {
                 }`}
               >
                 Trade Ledger Logs
+              </button>
+              <button
+                onClick={() => setActiveTab('gamification')}
+                className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
+                  activeTab === 'gamification'
+                    ? 'border-brand-accent text-brand-accent'
+                    : 'border-transparent text-gray-500 hover:text-white'
+                }`}
+              >
+                Achievements & Streaks
               </button>
             </div>
 
@@ -601,6 +797,187 @@ export default function Portfolio() {
                 </div>
               )
             )}
+
+            {/* Achievements & Streaks Tab */}
+            {activeTab === 'gamification' && (() => {
+              const stats = gamificationStats || {
+                currentStreak: 0,
+                longestStreak: 0,
+                totalPredictions: 0,
+                correctPredictions: 0,
+                xp: 0,
+                level: 1,
+                progressPercent: 0,
+                xpNeededForNextLevel: 100,
+                claimedToday: false,
+                unlockedAchievements: [],
+              };
+              
+              const unlockedCount = stats.unlockedAchievements ? stats.unlockedAchievements.length : 0;
+              
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Left Column: Streak, XP Progress, & Faucet Claim (5 cols) */}
+                  <div className="lg:col-span-5 space-y-6">
+                    {/* Level & Streak Card */}
+                    <div className="bg-[#121620] border border-border/80 rounded-2xl p-6 relative overflow-hidden group shadow-xl">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-2xl group-hover:bg-orange-500/10 transition-all duration-300"></div>
+                      
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Level & Reputation</span>
+                          <h3 className="text-3xl font-black text-white font-heading mt-1 flex items-baseline gap-1.5">
+                            Level {stats.level}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-orange-400">
+                          <Flame className="w-5 h-5 fill-orange-500 animate-pulse" />
+                          <div className="text-right">
+                            <span className="text-base font-black font-heading block leading-none">{stats.currentStreak}</span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider block">Current Streak</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 space-y-2">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-gray-400">XP Progress</span>
+                          <span className="text-white font-bold">{stats.xp} / {stats.xpNeededForNextLevel} XP</span>
+                        </div>
+                        <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-border/40 p-0.5">
+                          <div 
+                            className="h-full bg-gradient-to-r from-brand-accent to-indigo-500 rounded-full transition-all duration-500 shadow-glow"
+                            style={{ width: `${stats.progressPercent}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-500 font-medium italic mt-1">
+                          Earn +20 XP with every prediction. Level up to display exclusive community flairs!
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 mt-6 pt-5 border-t border-border/40">
+                        <div className="bg-[#0b0e14]/50 border border-border/40 rounded-xl p-3 text-center">
+                          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Longest Streak</span>
+                          <span className="text-sm font-extrabold text-white font-heading mt-1 block">🔥 {stats.longestStreak} Days</span>
+                        </div>
+                        <div className="bg-[#0b0e14]/50 border border-border/40 rounded-xl p-3 text-center">
+                          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Prediction Accuracy</span>
+                          <span className="text-sm font-extrabold text-brand-yes font-heading mt-1 block">
+                            {stats.totalPredictions > 0 
+                              ? `${Math.round((stats.correctPredictions / stats.totalPredictions) * 100)}%` 
+                              : '0%'
+                            }
+                          </span>
+                          <span className="text-[8px] text-gray-500 font-semibold block mt-0.5">
+                            {stats.correctPredictions} / {stats.totalPredictions} won
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Daily Faucet Card */}
+                    <div className="bg-[#121620] border border-border/80 rounded-2xl p-6 relative overflow-hidden group shadow-xl">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-brand-yes/5 rounded-full blur-2xl group-hover:bg-brand-yes/10 transition-all duration-300"></div>
+                      
+                      <div className="flex items-center space-x-3.5 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-brand-yes/10 border border-brand-yes/20 flex items-center justify-center text-brand-yes shadow-inner">
+                          <Award className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-extrabold text-white uppercase tracking-wider">Daily Faucet Bonus</h4>
+                          <p className="text-[10px] text-gray-400 font-medium">Claim 100 BP free coins once every calendar day.</p>
+                        </div>
+                      </div>
+
+                      {stats.claimedToday ? (
+                        <div className="space-y-3">
+                          <button 
+                            disabled
+                            className="w-full py-3 rounded-xl bg-gray-800/80 border border-border/60 text-gray-500 text-xs font-bold uppercase tracking-wider cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            ✅ Claimed Today
+                          </button>
+                          <div className="bg-[#0b0e14]/50 border border-border/40 rounded-xl px-4 py-3 flex items-center justify-between text-xs">
+                            <span className="text-gray-400 font-semibold">Next Claim In</span>
+                            <span className="text-orange-400 font-black font-mono tracking-wider">{timeUntilReset || 'Calculating...'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <button 
+                            onClick={handleClaimFaucet}
+                            disabled={isClaiming}
+                            className="w-full py-3 rounded-xl bg-gradient-to-r from-brand-yes to-emerald-600 hover:from-brand-yes/95 hover:to-emerald-600/95 text-white text-xs font-black uppercase tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 shadow-glow flex items-center justify-center gap-2"
+                          >
+                            {isClaiming ? (
+                              <>
+                                <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                                Processing Claim...
+                              </>
+                            ) : (
+                              'CLAIM FREE 100 BP'
+                            )}
+                          </button>
+                          {claimMessage && (
+                            <p className={`text-[10px] font-bold text-center ${
+                              claimMessage.type === 'success' ? 'text-brand-yes' : 'text-brand-no'
+                            }`}>
+                              {claimMessage.text}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Achievements Grid (7 cols) */}
+                  <div className="lg:col-span-7 bg-[#121620] border border-border/80 rounded-2xl p-6">
+                    <h3 className="text-sm font-extrabold text-white uppercase tracking-wider mb-5 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-brand-accent" />
+                      Achievement Badges ({unlockedCount} / {badges.length})
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {badges.map((b) => {
+                        const isUnlocked = stats.unlockedAchievements ? stats.unlockedAchievements.includes(b.type) : false;
+                        return (
+                          <div 
+                            key={b.type}
+                            className={`relative border rounded-2xl p-4 flex flex-col items-center justify-between text-center transition-all duration-300 ${
+                              isUnlocked 
+                                ? 'bg-[#181d2a]/50 border-brand-accent/25 hover:border-brand-accent/40 shadow-glow'
+                                : 'bg-[#121620]/30 border-border/40 hover:border-border/60'
+                            }`}
+                          >
+                            {isUnlocked && (
+                              <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded text-[8px] font-black tracking-wider text-brand-yes bg-brand-yesMuted border border-brand-yes/20 uppercase">
+                                Unlocked
+                              </span>
+                            )}
+                            
+                            <div className="my-2">
+                              {renderBadgeIcon(b.type, isUnlocked)}
+                            </div>
+
+                            <div className="space-y-1 mt-2">
+                              <h4 className={`text-xs font-black uppercase tracking-wider ${isUnlocked ? 'text-white' : 'text-gray-500'}`}>
+                                {b.title}
+                              </h4>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wide">
+                                {b.requirement}
+                              </p>
+                              <p className="text-[10px] text-gray-500 font-medium leading-relaxed max-w-[180px] mx-auto mt-1">
+                                {b.description}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </main>
       </div>

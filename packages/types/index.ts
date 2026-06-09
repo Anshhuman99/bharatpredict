@@ -75,6 +75,15 @@ export interface WalletTransactionRequestDto {
   amount: number;
 }
 
+export interface LimitOrderRequestDto {
+  userId: string;
+  marketId: string;
+  side: 'YES' | 'NO';
+  orderType: 'BUY' | 'SELL';
+  price: number;
+  shares: number;
+}
+
 export interface PortfolioHolding extends Holding {
   market: Market & { yesPrice: number; noPrice: number };
   currentValue: number;
@@ -106,10 +115,20 @@ export interface Comment {
   marketId: string;
   userId: string;
   text: string;
+  parentId: string | null;
   createdAt: Date | string;
+  upvotes: number;
+  downvotes: number;
+  myVote: number | null; // 1, -1, or null
+  replies?: Comment[];
   user?: {
     username: string;
     avatar: string;
+    level?: number;
+    winRate?: number;
+    currentStreak?: number;
+    isExpert?: boolean;
+    achievements?: string[];
   };
 }
 
@@ -120,6 +139,7 @@ export interface Candlestick {
   close: number;
   high: number;
   low: number;
+  isCorrect?: boolean;
 }
 
 export interface CopyTradingRelation {
@@ -136,6 +156,7 @@ export interface CommentRequestDto {
   marketId: string;
   userId: string;
   text: string;
+  parentId?: string;
 }
 
 export interface CopyTradingRequestDto {

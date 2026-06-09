@@ -29,7 +29,7 @@ export default function SkeletonLoader({ type = 'card', count = 1 }: SkeletonLoa
             key={idx}
             variants={pulse}
             animate="animate"
-            className="bg-[#121620]/60 border border-border/60 rounded-2xl p-5 space-y-4"
+            className="bg-card/60 border border-border/60 rounded-2xl p-5 space-y-4"
           >
             <div className="flex justify-between items-center">
               <div className="w-16 h-4 bg-border/80 rounded-md"></div>
@@ -57,7 +57,7 @@ export default function SkeletonLoader({ type = 'card', count = 1 }: SkeletonLoa
             key={idx}
             variants={pulse}
             animate="animate"
-            className="p-3 bg-[#121620]/40 border border-border/50 rounded-xl flex items-center justify-between gap-4"
+            className="p-3 bg-card/40 border border-border/50 rounded-xl flex items-center justify-between gap-4"
           >
             <div className="flex items-center space-x-3 w-2/3">
               <div className="w-8 h-8 rounded-full bg-border/80"></div>
@@ -78,7 +78,7 @@ export default function SkeletonLoader({ type = 'card', count = 1 }: SkeletonLoa
       <motion.div
         variants={pulse}
         animate="animate"
-        className="bg-[#121620] border border-border/80 rounded-2xl p-6 space-y-4 w-full"
+        className="bg-card border border-border/80 rounded-2xl p-6 space-y-4 w-full"
       >
         <div className="flex justify-between items-center">
           <div className="space-y-2">

@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CopyTradingRequestDto } from '@bharatpredict/types';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class CopyTradingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async startCopyTrading(dto: CopyTradingRequestDto) {
@@ -17,7 +19,7 @@ export class CopyTradingService {
       throw new BadRequestException('Allocation capital must be greater than zero');
     }
 
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Verify copier user exists and has enough capital
       const copier = await tx.user.findUnique({
         where: { id: copierId },
@@ -87,8 +89,22 @@ export class CopyTradingService {
         success: true,
         relationId: relation.id,
         newBalance: updatedCopier.walletBalance,
+        leaderUsername: leader.username,
+        allocated,
       };
     });
+
+    if (result.success) {
+      await this.notifications.createNotification(
+        copierId,
+        'COPY_TRADE',
+        'Copy Trading Started 📈',
+        `You are now copying trades from leader '${result.leaderUsername}' with an allocated capital of ${result.allocated} BP.`,
+        { leaderId }
+      );
+    }
+
+    return result;
   }
 
   async getActiveRelations(userId: string) {

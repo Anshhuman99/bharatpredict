@@ -10,6 +10,9 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { CopyTradingModule } from './modules/copytrading/copytrading.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { GamificationModule } from './modules/gamification/gamification.module';
+import { UsersModule } from './modules/users/users.module';
 import { AppController } from './app.controller';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
 
@@ -28,6 +31,9 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     CommentsModule,
     CopyTradingModule,
     PaymentsModule,
+    NotificationsModule,
+    GamificationModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [],

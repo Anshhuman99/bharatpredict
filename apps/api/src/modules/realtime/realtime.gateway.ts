@@ -137,4 +137,10 @@ export class RealtimeGateway
       this.server.emit(`new_comment_${marketId}`, payload);
     }
   }
+
+  broadcastNotification(userId: string, notification: any) {
+    if (this.server) {
+      this.server.to(`user:${userId}`).emit('notification:new', notification);
+    }
+  }
 }

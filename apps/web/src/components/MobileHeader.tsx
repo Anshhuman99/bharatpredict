@@ -3,31 +3,40 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
+import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 import { Home, PieChart, Wallet, Award, Menu } from 'lucide-react';
 import { useState } from 'react';
 
 export default function MobileHeader() {
   const pathname = usePathname();
-  const { walletBalance, isAuthenticated } = useWallet();
+  const { walletBalance, isAuthenticated, gamificationStats } = useWallet();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <>
       {/* Mobile Top Status Bar */}
-      <header className="md:hidden flex items-center justify-between px-5 py-4 border-b border-border bg-[#0b0e14]/95 backdrop-blur-md sticky top-0 z-30">
+      <header className="md:hidden flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur-md sticky top-0 z-30">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-accent to-indigo-600 flex items-center justify-center">
             <span className="font-heading font-bold text-white text-sm">🇮🇳</span>
           </div>
-          <span className="font-heading font-bold text-base tracking-wide text-white">
+          <span className="font-heading font-bold text-base tracking-wide text-foreground">
             BharatPredict
           </span>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2.5">
+          <ThemeToggle />
+          {isAuthenticated && gamificationStats?.currentStreak > 0 && (
+            <span className="text-[10px] text-[#ff5722] font-black flex items-center gap-0.5">
+              🔥 {gamificationStats.currentStreak}d
+            </span>
+          )}
+          {isAuthenticated && <NotificationBell />}
           {isAuthenticated ? (
             <Link href="/wallet" className="bg-[#121620] border border-border px-3 py-1.5 rounded-xl text-xs font-bold text-white">
-              ₹{walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+              {walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 0 })} BP
             </Link>
           ) : (
             <Link href="/login" className="bg-brand-accent text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-glow uppercase tracking-wider text-[10px]">

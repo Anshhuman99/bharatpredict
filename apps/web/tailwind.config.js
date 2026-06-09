@@ -9,15 +9,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#0b0e14", // Bloomberg/Zerodha deep slate-black
-        foreground: "#f5f6f9",
+        background: "rgb(var(--background))",
+        foreground: "rgb(var(--foreground))",
         card: {
-          DEFAULT: "#121620", // Card background
-          hover: "#181d2a",   // Card hover background
+          DEFAULT: "rgb(var(--card))",
+          hover: "rgb(var(--card-hover))",
         },
         border: {
-          DEFAULT: "#1e2530", // Smooth premium dark borders
-          accent: "#2f3a4c",
+          DEFAULT: "rgb(var(--border))",
+          accent: "rgb(var(--border-accent))",
         },
         brand: {
           yes: "#00c853",    // Vibrant emerald for YES
@@ -27,8 +27,8 @@ module.exports = {
           accent: "#3b82f6", // Fintech highlight blue
         },
         muted: {
-          DEFAULT: "#828fbf",
-          foreground: "#4b5563",
+          DEFAULT: "rgb(var(--muted))",
+          foreground: "rgb(var(--muted-foreground))",
         }
       },
       fontFamily: {

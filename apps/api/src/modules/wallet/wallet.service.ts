@@ -17,7 +17,12 @@ export class WalletService {
         id: true,
         username: true,
         walletBalance: true,
+        reputationPoints: true,
         transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+        redemptions: {
           orderBy: { createdAt: 'desc' },
           take: 50,
         },

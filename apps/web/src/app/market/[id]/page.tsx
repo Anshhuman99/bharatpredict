@@ -7,6 +7,7 @@ import MobileHeader from '../../../components/MobileHeader';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
+import confetti from 'canvas-confetti';
 import {
   TrendingUp,
   TrendingDown,
@@ -22,10 +23,45 @@ import {
   CheckCircle2,
   ArrowDownLeft,
   ArrowUpRight,
+  Link2,
 } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050';
 const API_URL = BASE_URL.endsWith('/api/v1') ? BASE_URL : `${BASE_URL}/api/v1`;
+
+const playChaChingSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    
+    // Low chime tone
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    gain1.gain.setValueAtTime(0.1, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    
+    // High chime tone
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.08); // A5
+    gain2.gain.setValueAtTime(0.1, now + 0.08);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.55);
+  } catch (e) {
+    console.error('Failed to play sound:', e);
+  }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -53,6 +89,186 @@ function CountdownTimer({ endDate }: { endDate: string }) {
   }, [endDate]);
 
   return <span>{remaining}</span>;
+}
+
+function CommentNode({
+  comment,
+  depth = 0,
+  onReplySubmit,
+  onVote,
+  isAuthenticated,
+  activeReplyId,
+  setActiveReplyId,
+  replyText,
+  setReplyText,
+  isSubmittingReply
+}: {
+  comment: any;
+  depth?: number;
+  onReplySubmit: (parentId: string, text: string) => Promise<void>;
+  onVote: (commentId: string, value: number) => Promise<void>;
+  isAuthenticated: boolean;
+  activeReplyId: string | null;
+  setActiveReplyId: (id: string | null) => void;
+  replyText: string;
+  setReplyText: (text: string) => void;
+  isSubmittingReply: boolean;
+}) {
+  const score = comment.upvotes - comment.downvotes;
+
+  return (
+    <div className="space-y-3">
+      {/* Comment Card */}
+      <div 
+        className={`relative rounded-xl p-4 flex gap-3 text-xs border transition-all duration-300 ${
+          comment.user?.isExpert
+            ? 'bg-[#1e1b12]/50 border-amber-500/30 hover:border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.05)]'
+            : 'bg-[#181d2a]/50 border-border/60 hover:border-border/80'
+        }`}
+        style={{ marginLeft: `${Math.min(depth * 16, 48)}px` }}
+      >
+        {comment.user?.isExpert && (
+          <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[8px] font-black text-amber-500 uppercase tracking-wider">
+            👑 Expert Take
+          </div>
+        )}
+
+        {/* Voting column */}
+        <div className="flex flex-col items-center gap-1 text-gray-500">
+          <button 
+            disabled={!isAuthenticated}
+            onClick={() => onVote(comment.id, comment.myVote === 1 ? 0 : 1)}
+            className={`hover:text-amber-500 transition-colors ${comment.myVote === 1 ? 'text-amber-500 scale-110' : ''}`}
+            title="Upvote"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+          </button>
+          <span className={`font-mono font-bold text-[10px] ${
+            comment.myVote === 1 ? 'text-amber-500' : (comment.myVote === -1 ? 'text-blue-500' : 'text-gray-400')
+          }`}>
+            {score > 0 ? `+${score}` : score}
+          </span>
+          <button 
+            disabled={!isAuthenticated}
+            onClick={() => onVote(comment.id, comment.myVote === -1 ? 0 : -1)}
+            className={`hover:text-blue-500 transition-colors ${comment.myVote === -1 ? 'text-blue-500 scale-110' : ''}`}
+            title="Downvote"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+
+        {/* Avatar */}
+        <Link href={`/profile/${comment.userId}`} className="flex-shrink-0">
+          <img 
+            src={comment.user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=60'}
+            alt={comment.user?.username} 
+            className="w-8 h-8 rounded-full object-cover border border-border" 
+          />
+        </Link>
+
+        {/* Info & text */}
+        <div className="flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Link href={`/profile/${comment.userId}`} className="font-extrabold text-white hover:text-brand-accent transition-colors">
+              {comment.user?.username}
+            </Link>
+            
+            {/* User Level */}
+            <span className="text-[8px] font-extrabold px-1 py-0.2 rounded bg-brand-accent/10 border border-brand-accent/20 text-brand-accent uppercase tracking-wide">
+              Lvl {comment.user?.level || 1}
+            </span>
+            
+            {comment.user?.winRate > 0 && (
+              <span className="text-[8px] font-extrabold px-1 py-0.2 rounded bg-brand-yesMuted border border-brand-yes/20 text-brand-yes uppercase tracking-wide">
+                {comment.user.winRate}% W/R
+              </span>
+            )}
+            
+            {comment.user?.currentStreak > 0 && (
+              <span className="text-[8px] font-black px-1 py-0.2 rounded bg-orange-500/10 border border-orange-500/20 text-[#ff5722] uppercase tracking-wide">
+                🔥 {comment.user.currentStreak}d
+              </span>
+            )}
+
+            <span className="text-[9px] text-gray-500 ml-1">
+              {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+
+          <p className="text-gray-300 font-semibold leading-relaxed">{comment.text}</p>
+
+          {/* Actions */}
+          {isAuthenticated && (
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => {
+                  if (activeReplyId === comment.id) {
+                    setActiveReplyId(null);
+                  } else {
+                    setActiveReplyId(comment.id);
+                    setReplyText('');
+                  }
+                }}
+                className="text-[10px] text-gray-500 hover:text-white font-extrabold flex items-center gap-1 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Reply
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Reply input field (indented) */}
+      {activeReplyId === comment.id && (
+        <div 
+          className="flex gap-2"
+          style={{ marginLeft: `${Math.min((depth + 1) * 16, 64)}px` }}
+        >
+          <input 
+            type="text" 
+            placeholder={`Reply to ${comment.user?.username}...`}
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            className="flex-1 bg-[#0b0e14] border border-border focus:border-brand-accent/50 outline-none rounded-xl px-3 py-2 text-xs text-white"
+          />
+          <button
+            onClick={() => onReplySubmit(comment.id, replyText)}
+            disabled={isSubmittingReply || !replyText.trim()}
+            className="bg-brand-accent hover:bg-blue-600 disabled:bg-gray-700 text-white px-4 rounded-xl text-xs font-bold transition-all"
+          >
+            Post
+          </button>
+        </div>
+      )}
+
+      {/* Replies (Recursive) */}
+      {comment.replies && comment.replies.length > 0 && (
+        <div className="space-y-3 relative">
+          <div 
+            className="absolute left-0 top-0 bottom-4 w-0.5 bg-border/40 hover:bg-brand-accent/30 transition-colors" 
+            style={{ marginLeft: `${Math.min((depth * 16) + 24, 72)}px` }}
+          />
+          {comment.replies.map((reply: any) => (
+            <CommentNode 
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              onReplySubmit={onReplySubmit}
+              onVote={onVote}
+              isAuthenticated={isAuthenticated}
+              activeReplyId={activeReplyId}
+              setActiveReplyId={setActiveReplyId}
+              replyText={replyText}
+              setReplyText={setReplyText}
+              isSubmittingReply={isSubmittingReply}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,6 +309,52 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const [newCommentText, setNewCommentText] = useState<string>('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
+  // Thread replies state
+  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState<string>('');
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+    navigator.clipboard.writeText(currentUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.getAttribute('contenteditable') === 'true')
+      ) {
+        return;
+      }
+
+      if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        setTradeMode('BUY');
+        setTradeSide('YES');
+        const amtInput = document.querySelector('input[placeholder="0.00"]') as HTMLInputElement;
+        if (amtInput) amtInput.focus();
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setTradeMode('BUY');
+        setTradeSide('NO');
+        const amtInput = document.querySelector('input[placeholder="0.00"]') as HTMLInputElement;
+        if (amtInput) amtInput.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Fetch market
   // ─────────────────────────────────────────────────────────────────────────
@@ -103,7 +365,18 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       if (res.ok) {
         const data = await res.json();
         setMarket(data);
-        if (data.comments) setComments(data.comments);
+      }
+
+      const commentsHeaders: Record<string, string> = {};
+      if (token) {
+        commentsHeaders['Authorization'] = `Bearer ${token}`;
+      }
+      const commentsRes = await fetch(`${API_URL}/markets/${marketId}/comments`, {
+        headers: commentsHeaders
+      });
+      if (commentsRes.ok) {
+        const commentsData = await commentsRes.json();
+        setComments(commentsData);
       }
     } catch (e) {
       console.error('Error fetching market details:', e);
@@ -115,16 +388,144 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
     fetchDetails();
     const timer = setInterval(fetchDetails, 4000);
     return () => clearInterval(timer);
-  }, []);
+  }, [token]);
 
-  // WebSocket — new comments
+  // WebSocket — new comments (handles threaded insert)
   useEffect(() => {
     if (!socket) return;
     socket.on(`new_comment_${marketId}`, (newComment: any) => {
-      setComments((prev) => prev.some((c) => c.id === newComment.id) ? prev : [newComment, ...prev]);
+      setComments((prev) => {
+        const exists = (list: any[]): boolean => {
+          return list.some(c => c.id === newComment.id || (c.replies && exists(c.replies)));
+        };
+        if (exists(prev)) return prev;
+
+        if (!newComment.parentId) {
+          return [newComment, ...prev];
+        }
+
+        const insertComment = (list: any[]): any[] => {
+          return list.map(c => {
+            if (c.id === newComment.parentId) {
+              return { ...c, replies: [newComment, ...(c.replies || [])] };
+            } else if (c.replies && c.replies.length > 0) {
+              return { ...c, replies: insertComment(c.replies) };
+            }
+            return c;
+          });
+        };
+        return insertComment(prev);
+      });
     });
     return () => { socket.off(`new_comment_${marketId}`); };
   }, [socket, marketId]);
+
+  const handleReplySubmit = async (parentId: string, text: string) => {
+    if (!text.trim() || !token) return;
+    setIsSubmittingReply(true);
+    try {
+      const res = await fetch(`${API_URL}/markets/${marketId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ text, parentId })
+      });
+      if (res.ok) {
+        const payload = await res.json();
+        const createdComment = payload.success ? payload.data : payload;
+        setComments((prev) => {
+          const exists = (list: any[]): boolean => {
+            return list.some(c => c.id === createdComment.id || (c.replies && exists(c.replies)));
+          };
+          if (exists(prev)) return prev;
+
+          const insertComment = (list: any[]): any[] => {
+            return list.map(c => {
+              if (c.id === parentId) {
+                return { ...c, replies: [createdComment, ...(c.replies || [])] };
+              } else if (c.replies && c.replies.length > 0) {
+                return { ...c, replies: insertComment(c.replies) };
+              }
+              return c;
+            });
+          };
+          return insertComment(prev);
+        });
+        setActiveReplyId(null);
+        setReplyText('');
+      }
+    } catch (e) {
+      console.error('Failed to submit comment reply:', e);
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  };
+
+  const handleVoteComment = async (commentId: string, value: number) => {
+    if (!isAuthenticated || !token) return;
+    try {
+      setComments((prev) => {
+        const updateVote = (list: any[]): any[] => {
+          return list.map(c => {
+            if (c.id === commentId) {
+              const oldVote = c.myVote || 0;
+              let newUp = c.upvotes;
+              let newDown = c.downvotes;
+              
+              if (oldVote === 1) newUp--;
+              else if (oldVote === -1) newDown--;
+              
+              if (value === 1) newUp++;
+              else if (value === -1) newDown++;
+
+              return {
+                ...c,
+                myVote: value !== 0 ? value : null,
+                upvotes: newUp,
+                downvotes: newDown
+              };
+            } else if (c.replies && c.replies.length > 0) {
+              return { ...c, replies: updateVote(c.replies) };
+            }
+            return c;
+          });
+        };
+        return updateVote(prev);
+      });
+
+      const res = await fetch(`${API_URL}/markets/comments/${commentId}/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ value })
+      });
+      if (!res.ok) {
+        fetchDetails();
+      }
+    } catch (e) {
+      console.error('Failed to vote comment:', e);
+      fetchDetails();
+    }
+  };
+
+  const handleShare = (platform: 'twitter' | 'whatsapp') => {
+    if (!market) return;
+    const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const yesProb = Math.round(spotYesPrice * 100);
+    const text = `I just predicted YES on "${market.title}" with a probability of ${yesProb}%! Join me on BharatPredict to trade India's future:`;
+    
+    if (platform === 'twitter') {
+      const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(currentUrl)}`;
+      window.open(url, '_blank');
+    } else if (platform === 'whatsapp') {
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + currentUrl)}`;
+      window.open(url, '_blank');
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // BUY preview (debounced)
@@ -208,6 +609,15 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       setCashAmount('');
       setBuyPreview(null);
       fetchDetails();
+      
+      // Trigger animations and sounds
+      playChaChingSound();
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
       setTimeout(() => setTradeSuccess(null), 8000);
     } else {
       setTradeError(result.message || 'Trade failed.');
@@ -228,6 +638,15 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       setSellShares('');
       setSellPreview(null);
       fetchDetails();
+
+      // Trigger animations and sounds
+      playChaChingSound();
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+
       setTimeout(() => setSellSuccess(null), 8000);
     } else {
       setSellError(result.message || 'Sell failed.');
@@ -251,7 +670,13 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
       if (res.ok) {
         const payload = await res.json();
         const created = payload.success ? payload.data : payload;
-        setComments((prev) => prev.some((c) => c.id === created.id) ? prev : [created, ...prev]);
+        setComments((prev) => {
+          const exists = (list: any[]): boolean => {
+            return list.some(c => c.id === created.id || (c.replies && exists(c.replies)));
+          };
+          if (exists(prev)) return prev;
+          return [created, ...prev];
+        });
         setNewCommentText('');
       }
     } catch (e) {
@@ -305,7 +730,7 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
             <div className="lg:col-span-2 space-y-6">
 
               {/* Header card */}
-              <div className="bg-[#121620] border border-border/80 rounded-2xl p-6 relative overflow-hidden">
+              <div className="bg-card border border-border/80 rounded-2xl p-6 relative overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-bold text-brand-accent px-2 py-0.5 rounded bg-brand-accent/10 border border-brand-accent/20">
@@ -315,6 +740,36 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                       <Calendar className="w-3.5 h-3.5" />
                       Closes: <CountdownTimer endDate={market.endDate} />
                     </span>
+                  </div>
+
+                  {/* Share buttons */}
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleShare('twitter')}
+                      className="p-1.5 rounded-lg bg-[#181d2a] border border-border/60 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center justify-center"
+                      title="Share to Twitter"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                      </svg>
+                    </button>
+                    <button 
+                      onClick={() => handleShare('whatsapp')}
+                      className="p-1.5 rounded-lg bg-[#181d2a] border border-border/60 text-gray-400 hover:text-green-500 hover:border-green-500/50 transition-colors flex items-center justify-center"
+                      title="Share to WhatsApp"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.458L0 24zm6.59-4.846c1.62.962 3.21 1.6 5.343 1.6 5.485 0 9.948-4.463 9.952-9.95.002-2.659-1.03-5.16-2.906-7.038C17.158 1.889 14.65 .857 12 0.857 6.52 0.857 2.057 5.32 2.053 10.8c-.001 2.03.535 4.02 1.55 5.795L2.628 20.25l3.966-1.042z"/>
+                      </svg>
+                    </button>
+                    <button 
+                      onClick={handleCopyLink}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#181d2a] border border-border/60 text-gray-400 hover:text-white hover:border-gray-500 transition-colors flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider font-heading"
+                      title="Copy Link"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>{copied ? 'Copied!' : 'Copy Link'}</span>
+                    </button>
                   </div>
                   {isResolved && (
                     <span className={`text-xs font-black px-3 py-1 rounded-full border ${
@@ -452,22 +907,23 @@ function MarketDetailContent({ params }: { params: Promise<{ id: string }> }) {
                   </div>
                 )}
 
-                <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
                   {comments.length === 0 ? (
                     <div className="text-center py-8 text-gray-500 text-xs font-medium">Be the first to share an insight!</div>
                   ) : (
                     comments.map((c: any) => (
-                      <div key={c.id} className="bg-[#181d2a]/50 border border-border/60 rounded-xl p-4 flex gap-3 text-xs">
-                        <img src={c.user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=60'}
-                          alt={c.user?.username} className="w-8 h-8 rounded-full object-cover border border-border flex-shrink-0" />
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-white">{c.user?.username}</span>
-                            <span className="text-[9px] text-gray-500">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                          <p className="text-gray-300 font-semibold leading-relaxed">{c.text}</p>
-                        </div>
-                      </div>
+                      <CommentNode
+                        key={c.id}
+                        comment={c}
+                        onReplySubmit={handleReplySubmit}
+                        onVote={handleVoteComment}
+                        isAuthenticated={isAuthenticated}
+                        activeReplyId={activeReplyId}
+                        setActiveReplyId={setActiveReplyId}
+                        replyText={replyText}
+                        setReplyText={setReplyText}
+                        isSubmittingReply={isSubmittingReply}
+                      />
                     ))
                   )}
                 </div>

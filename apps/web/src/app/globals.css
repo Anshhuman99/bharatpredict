@@ -6,14 +6,43 @@
 
 :root {
   --font-sans: 'Inter', sans-serif;
+  
+  /* Light Theme */
+  --background: 248, 250, 252;
+  --foreground: 15, 23, 42;
+  --card: 255, 255, 255;
+  --card-hover: 241, 245, 249;
+  --border: 226, 232, 240;
+  --border-accent: 203, 213, 225;
+  --muted: 100, 116, 139;
+  --muted-foreground: 148, 163, 184;
+  --scroll-track: 248, 250, 252;
+  --scroll-thumb: 203, 213, 225;
+  --scroll-thumb-hover: 148, 163, 184;
+}
+
+.dark {
+  /* Dark Theme */
+  --background: 11, 14, 20;
+  --foreground: 245, 246, 249;
+  --card: 18, 22, 32;
+  --card-hover: 24, 29, 42;
+  --border: 30, 37, 48;
+  --border-accent: 47, 58, 76;
+  --muted: 130, 143, 191;
+  --muted-foreground: 75, 85, 99;
+  --scroll-track: 11, 14, 20;
+  --scroll-thumb: 30, 37, 48;
+  --scroll-thumb-hover: 47, 58, 76;
 }
 
 body {
-  background-color: #0b0e14;
-  color: #f5f6f9;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
   font-family: var(--font-sans);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 /* Custom Scrollbar for Zerodha/Bloomberg aesthetic */
@@ -23,17 +52,18 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0e14;
+  background: rgb(var(--scroll-track));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e2530;
+  background: rgb(var(--scroll-thumb));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2f3a4c;
+  background: rgb(var(--scroll-thumb-hover));
 }
+
 
 /* Custom animation classes */
 @keyframes pulseGlow {

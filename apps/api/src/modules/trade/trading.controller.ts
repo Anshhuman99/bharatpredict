@@ -1,6 +1,6 @@
-import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus, UseGuards, Req, Param } from '@nestjs/common';
 import { TradingService } from './trading.service';
-import { TradeRequestDto, SellRequestDto } from '@bharatpredict/types';
+import { TradeRequestDto, SellRequestDto, LimitOrderRequestDto } from '@bharatpredict/types';
 import { AuthGuard } from '../auth/auth.guard';
 
 @Controller('trade')
@@ -45,6 +45,30 @@ export class TradingController {
     @Query('shares') shares: string,
   ) {
     return await this.tradingService.previewSell(marketId, req.user.id, side, parseFloat(shares));
+  }
+
+  // POST /trade/limit-order — place a limit order (secured)
+  @Post('limit-order')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async placeLimitOrder(@Body() dto: LimitOrderRequestDto, @Req() req: any) {
+    dto.userId = req.user.id;
+    return await this.tradingService.placeLimitOrder(dto);
+  }
+
+  // GET /trade/limit-orders — get active limit orders (secured)
+  @Get('limit-orders')
+  @UseGuards(AuthGuard)
+  async getActiveLimitOrders(@Req() req: any, @Query('marketId') marketId?: string) {
+    return await this.tradingService.getActiveLimitOrders(req.user.id, marketId);
+  }
+
+  // POST /trade/cancel-limit-order/:id — cancel a limit order (secured)
+  @Post('cancel-limit-order/:id')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async cancelLimitOrder(@Param('id') id: string, @Req() req: any) {
+    return await this.tradingService.cancelLimitOrder(id, req.user.id);
   }
 }
 

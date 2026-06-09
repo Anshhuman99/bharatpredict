@@ -95,6 +95,7 @@ export class AuthService {
         username: user.username,
         avatar: user.avatar,
         walletBalance: user.walletBalance,
+        reputationPoints: user.reputationPoints,
         role: user.role
       },
       passphrase,
@@ -138,6 +139,7 @@ export class AuthService {
         username: user.username,
         avatar: user.avatar,
         walletBalance: user.walletBalance,
+        reputationPoints: user.reputationPoints,
         role: user.role
       },
       token,
@@ -165,6 +167,7 @@ export class AuthService {
       username: session.user.username,
       avatar: session.user.avatar,
       walletBalance: session.user.walletBalance,
+      reputationPoints: session.user.reputationPoints,
       role: session.user.role
     };
   }

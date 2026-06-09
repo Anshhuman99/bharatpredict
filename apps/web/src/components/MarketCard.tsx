@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Bot, Users, ChevronRight } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { useState, useEffect } from 'react';
 
 const FeaturedSparkline = dynamic(() => import('./FeaturedSparkline'), { ssr: false });
 
@@ -14,6 +15,35 @@ interface MarketCardProps {
 export default function MarketCard({ market }: MarketCardProps) {
   const yesPercent = Math.round((market.yesPrice || 0.5) * 100);
   
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      if (!market.endDate) return '';
+      const difference = +new Date(market.endDate) - +new Date();
+      if (difference <= 0) return 'Closed';
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+
+      if (days > 0) {
+        return `Closes in ${days}d ${hours}h`;
+      }
+      if (hours > 0) {
+        return `Closes in ${hours}h ${minutes}m`;
+      }
+      return `Closes in ${minutes}m`;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 30000); // Update every 30s
+
+    return () => clearInterval(timer);
+  }, [market.endDate]);
+
   // Generate mini mock sparkline trend data for the card
   const miniSparklineData = [
     { value: 0.5 },
@@ -31,7 +61,7 @@ export default function MarketCard({ market }: MarketCardProps) {
     <motion.div
       whileHover={{ y: -6 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="bg-[#121620] border border-border/80 hover:border-brand-accent/50 rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 relative group overflow-hidden shadow-sm hover:shadow-glow"
+      className="bg-card border border-border/80 hover:border-brand-accent/50 rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 relative group overflow-hidden shadow-sm hover:shadow-glow"
     >
       {/* Glowing horizontal header highlight */}
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-accent/0 via-brand-accent/40 to-brand-accent/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -39,9 +69,16 @@ export default function MarketCard({ market }: MarketCardProps) {
       <div>
         {/* Card Header Info */}
         <div className="flex items-center justify-between">
-          <span className="text-[9px] font-extrabold text-brand-accent px-2 py-0.5 rounded bg-brand-accent/10 border border-brand-accent/20 font-heading uppercase tracking-wider">
-            {market.category}
-          </span>
+          <div className="flex items-center space-x-2">
+            <span className="text-[9px] font-extrabold text-brand-accent px-2 py-0.5 rounded bg-brand-accent/10 border border-brand-accent/20 font-heading uppercase tracking-wider">
+              {market.category}
+            </span>
+            {timeLeft && (
+              <span className="text-[9px] font-extrabold text-amber-500 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded font-heading uppercase tracking-wider">
+                {timeLeft}
+              </span>
+            )}
+          </div>
           
           <div className="flex items-center space-x-2 text-[10px] text-gray-500 font-semibold">
             <span className="flex h-1.5 w-1.5 rounded-full bg-brand-yes animate-pulse"></span>

@@ -1,14 +1,18 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { GamificationService } from '../gamification/gamification.service';
 import { LMSR } from './lmsr';
-import { TradeRequestDto, SellRequestDto } from '@bharatpredict/types';
+import { TradeRequestDto, SellRequestDto, LimitOrderRequestDto } from '@bharatpredict/types';
 
 @Injectable()
 export class TradingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
+    private readonly gamification: GamificationService,
   ) {}
 
   async executeTrade(dto: TradeRequestDto) {
@@ -18,8 +22,7 @@ export class TradingService {
       throw new BadRequestException('Trade amount must be greater than zero');
     }
 
-    // Run trade execution inside a rigorous database transaction to prevent race conditions
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Fetch and lock user details
       const user = await tx.user.findUnique({
         where: { id: userId },
@@ -43,21 +46,146 @@ export class TradingService {
         throw new BadRequestException('This market is already resolved and settled');
       }
 
-      // 3. Compute LMSR shares with platform fees and slippage calculations
-      const calculation = LMSR.calculateSharesReceived(
-        market.yesShares,
-        market.noShares,
-        market.liquidity,
-        amount,
-        side,
-        0.01, // 1% platform fee
-      );
+      // --- HYBRID P2P LIMIT ORDER MATCHING PATH ---
+      let matchedShares = 0;
+      let remainingCash = amount;
+      let p2pCashSpent = 0;
+      const matchesToNotify: any[] = [];
 
-      const { shares, fee, avgPrice } = calculation;
+      const rawCounterparties = await tx.limitOrder.findMany({
+        where: {
+          marketId,
+          status: { in: ['PENDING', 'PARTIAL'] },
+          userId: { not: userId },
+          OR: [
+            { orderType: 'SELL', side: side },
+            { orderType: 'BUY', side: side === 'YES' ? 'NO' : 'YES' }
+          ]
+        }
+      });
 
-      if (shares <= 0) {
+      const mappedCounterparties = rawCounterparties.map(cp => {
+        const executionPrice = cp.orderType === 'SELL' ? cp.price : (1.00 - cp.price);
+        return { cp, executionPrice };
+      });
+
+      mappedCounterparties.sort((a, b) => {
+        if (a.executionPrice !== b.executionPrice) {
+          return a.executionPrice - b.executionPrice;
+        }
+        return new Date(a.cp.createdAt).getTime() - new Date(b.cp.createdAt).getTime();
+      });
+
+      for (const item of mappedCounterparties) {
+        const cp = item.cp;
+        const executionPrice = item.executionPrice;
+        if (remainingCash <= 0.01) break;
+
+        const cpRemaining = cp.shares - cp.filled;
+        const maxBuyShares = remainingCash / executionPrice;
+        const matchShares = Math.min(cpRemaining, maxBuyShares);
+
+        if (matchShares <= 0.001) continue;
+
+        const cost = matchShares * executionPrice;
+        remainingCash -= cost;
+        p2pCashSpent += cost;
+        matchedShares += matchShares;
+
+        // Perform settlement updates for limit order match
+        if (cp.orderType === 'SELL') {
+          // Seller gets tokens
+          await tx.user.update({
+            where: { id: cp.userId },
+            data: { walletBalance: { increment: cost } }
+          });
+          await tx.transaction.create({
+            data: {
+              userId: cp.userId,
+              type: cp.side === 'YES' ? 'SELL_YES' : 'SELL_NO',
+              amount: cost,
+              status: 'SUCCESS'
+            }
+          });
+        } else {
+          // BUY other side: both got shares. Other side's tokens are already locked.
+          await tx.holding.upsert({
+            where: { userId_marketId: { userId: cp.userId, marketId } },
+            create: {
+              userId: cp.userId,
+              marketId,
+              yesShares: cp.side === 'YES' ? matchShares : 0,
+              noShares: cp.side === 'NO' ? matchShares : 0,
+            },
+            update: {
+              yesShares: cp.side === 'YES' ? { increment: matchShares } : undefined,
+              noShares: cp.side === 'NO' ? { increment: matchShares } : undefined,
+            }
+          });
+          // Create Trade record for counterparty
+          await tx.trade.create({
+            data: {
+              userId: cp.userId,
+              marketId,
+              side: cp.side,
+              amount: matchShares * cp.price,
+              shares: matchShares,
+              price: cp.price
+            }
+          });
+        }
+
+        // Collect match details for user notifications
+        matchesToNotify.push({
+          userId: cp.userId,
+          side: cp.side,
+          shares: matchShares,
+          price: cp.price,
+          orderId: cp.id,
+          marketTitle: market.title,
+        });
+
+        // Update cp limit order
+        const newCpFilled = cp.filled + matchShares;
+        await tx.limitOrder.update({
+          where: { id: cp.id },
+          data: {
+            filled: newCpFilled,
+            status: newCpFilled >= cp.shares ? 'FILLED' : 'PARTIAL'
+          }
+        });
+
+        // Broadcast cp wallet update
+        const cpUser = await tx.user.findUnique({ where: { id: cp.userId } });
+        if (cpUser) {
+          this.realtime.broadcastWalletUpdate(cp.userId, cpUser.walletBalance);
+        }
+      }
+
+      // --- AMM PATH FOR REMAINING CASH ---
+      let ammShares = 0;
+      let ammFee = 0;
+
+      if (remainingCash > 0.05) {
+        const calculation = LMSR.calculateSharesReceived(
+          market.yesShares,
+          market.noShares,
+          market.liquidity,
+          remainingCash,
+          side,
+          0.01, // 1% platform fee
+        );
+        ammShares = calculation.shares;
+        ammFee = calculation.fee;
+      }
+
+      const totalShares = matchedShares + ammShares;
+
+      if (totalShares <= 0) {
         throw new BadRequestException('Trade size too small');
       }
+
+      const avgPrice = amount / totalShares;
 
       // 4. Update user's wallet balance (decrement total cash spent)
       const updatedUser = await tx.user.update({
@@ -86,7 +214,7 @@ export class TradingService {
           marketId,
           side,
           amount,
-          shares,
+          shares: totalShares,
           price: avgPrice,
         },
         include: {
@@ -104,21 +232,21 @@ export class TradingService {
         create: {
           userId,
           marketId,
-          yesShares: side === 'YES' ? shares : 0,
-          noShares: side === 'NO' ? shares : 0,
+          yesShares: side === 'YES' ? totalShares : 0,
+          noShares: side === 'NO' ? totalShares : 0,
         },
         update: {
-          yesShares: side === 'YES' ? { increment: shares } : undefined,
-          noShares: side === 'NO' ? { increment: shares } : undefined,
+          yesShares: side === 'YES' ? { increment: totalShares } : undefined,
+          noShares: side === 'NO' ? { increment: totalShares } : undefined,
         },
       });
 
-      // 8. Update market state (q1, q2 and volume)
+      // 8. Update market state (increment AMM volume and shares only by what went through the AMM)
       const updatedMarket = await tx.market.update({
         where: { id: marketId },
         data: {
-          yesShares: side === 'YES' ? { increment: shares } : undefined,
-          noShares: side === 'NO' ? { increment: shares } : undefined,
+          yesShares: side === 'YES' ? { increment: ammShares } : undefined,
+          noShares: side === 'NO' ? { increment: ammShares } : undefined,
           volume: { increment: amount },
         },
       });
@@ -153,13 +281,42 @@ export class TradingService {
       return {
         success: true,
         tradeId: trade.id,
-        sharesBought: shares,
+        sharesBought: totalShares,
         avgPrice,
         newBalance: updatedUser.walletBalance,
         yesPrice: newYesPrice,
         noPrice: newNoPrice,
+        marketTitle: market.title,
+        matchesToNotify,
       };
     });
+
+    if (result.success) {
+      // Record gamification activity
+      await this.gamification.recordTradeActivity(userId);
+
+      // Create notification for trader
+      await this.notifications.createNotification(
+        userId,
+        'TRADE',
+        'Trade Executed',
+        `Bought ${result.sharesBought.toFixed(2)} shares of ${side} in '${result.marketTitle}' at average price of ${result.avgPrice.toFixed(2)} BP.`,
+        { marketId, tradeId: result.tradeId }
+      );
+
+      // Create notifications for matched counterparties
+      for (const match of result.matchesToNotify) {
+        await this.notifications.createNotification(
+          match.userId,
+          'TRADE',
+          'Limit Order Matched',
+          `Your limit order matched ${match.shares.toFixed(2)} shares of ${match.side} in '${match.marketTitle}' at ${match.price.toFixed(2)} BP.`,
+          { marketId, orderId: match.orderId }
+        );
+      }
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -173,7 +330,7 @@ export class TradingService {
       throw new BadRequestException('Shares to sell must be greater than zero');
     }
 
-    return await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Fetch user
       const user = await tx.user.findUnique({ where: { id: userId } });
       if (!user) throw new NotFoundException('User not found');
@@ -297,8 +454,24 @@ export class TradingService {
         newBalance: updatedUser.walletBalance,
         yesPrice: newYesPrice,
         noPrice: newNoPrice,
+        marketTitle: market.title,
       };
     });
+
+    if (result.success) {
+      // Record gamification activity
+      await this.gamification.recordTradeActivity(userId);
+
+      await this.notifications.createNotification(
+        userId,
+        'TRADE',
+        'Position Exited 📉',
+        `Sold ${result.sharesSold.toFixed(2)} shares of ${side} in '${result.marketTitle}' for a net credit of ${result.netCash.toFixed(2)} BP.`,
+        { marketId, tradeId: result.tradeId }
+      );
+    }
+
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -383,5 +556,418 @@ export class TradingService {
       avgPrice: calculation.avgPrice,
       slippage: calculation.slippage,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // LIMIT ORDERS: place, get active, cancel, match limit orders
+  // ---------------------------------------------------------------------------
+
+  async placeLimitOrder(dto: LimitOrderRequestDto) {
+    const { userId, marketId, side, orderType, price, shares } = dto;
+
+    if (price <= 0.009 || price >= 0.991) {
+      throw new BadRequestException('Price must be between 0.01 and 0.99');
+    }
+    if (shares <= 0) {
+      throw new BadRequestException('Shares must be greater than zero');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundException('User not found');
+
+      const cost = price * shares;
+      if (orderType === 'BUY') {
+        if (user.walletBalance < cost) {
+          throw new BadRequestException(`Insufficient balance. Cost: ${cost.toFixed(2)} tokens`);
+        }
+        await tx.user.update({
+          where: { id: userId },
+          data: { walletBalance: { decrement: cost } },
+        });
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: side === 'YES' ? 'BUY_YES' : 'BUY_NO',
+            amount: cost,
+            status: 'PENDING',
+          }
+        });
+      } else {
+        const holding = await tx.holding.findUnique({
+          where: { userId_marketId: { userId, marketId } }
+        });
+        const owned = holding ? (side === 'YES' ? holding.yesShares : holding.noShares) : 0;
+        if (owned < shares) {
+          throw new BadRequestException(`Insufficient shares to sell. Owned: ${owned.toFixed(2)}`);
+        }
+        await tx.holding.update({
+          where: { userId_marketId: { userId, marketId } },
+          data: {
+            yesShares: side === 'YES' ? { decrement: shares } : undefined,
+            noShares: side === 'NO' ? { decrement: shares } : undefined,
+          }
+        });
+      }
+
+      const order = await tx.limitOrder.create({
+        data: {
+          userId,
+          marketId,
+          side,
+          orderType,
+          price,
+          shares,
+          status: 'PENDING'
+        }
+      });
+
+      // Run matcher
+      const matches = await this.matchLimitOrder(order.id, tx) || [];
+
+      // Fetch market title
+      const market = await tx.market.findUnique({ where: { id: marketId } });
+      const marketTitle = market?.title || 'Prediction Market';
+
+      const updatedUser = await tx.user.findUnique({ where: { id: userId } });
+      if (updatedUser) {
+        this.realtime.broadcastWalletUpdate(userId, updatedUser.walletBalance);
+      }
+
+      return {
+        success: true,
+        orderId: order.id,
+        orderType,
+        side,
+        price,
+        shares,
+        marketTitle,
+        matches,
+      };
+    });
+
+    if (result.success) {
+      // Record gamification activity
+      await this.gamification.recordTradeActivity(userId);
+
+      // 1. Notify the order placement itself
+      await this.notifications.createNotification(
+        userId,
+        'TRADE',
+        'Limit Order Placed',
+        `Placed a limit order to ${result.orderType} ${result.shares.toFixed(2)} shares of ${result.side} at ${result.price.toFixed(2)} BP in '${result.marketTitle}'.`,
+        { marketId, orderId: result.orderId }
+      );
+
+      // 2. Notify all matches
+      for (const match of result.matches) {
+        // Notify the maker (the counterparty)
+        await this.notifications.createNotification(
+          match.makerUserId,
+          'TRADE',
+          'Limit Order Matched',
+          `Your limit order in '${result.marketTitle}' matched ${match.shares.toFixed(2)} shares of ${match.makerSide} at ${match.price.toFixed(2)} BP.`,
+          { marketId, orderId: match.makerOrderId }
+        );
+
+        // Notify the taker (this order creator, but only if they matched any shares)
+        if (match.takerUserId === userId) {
+          await this.notifications.createNotification(
+            userId,
+            'TRADE',
+            'Limit Order Matched',
+            `Your limit order in '${result.marketTitle}' matched ${match.shares.toFixed(2)} shares of ${result.side} at ${match.price.toFixed(2)} BP.`,
+            { marketId, orderId: result.orderId }
+          );
+        }
+      }
+    }
+
+    return result;
+  }
+
+  async getActiveLimitOrders(userId: string, marketId?: string) {
+    return await this.prisma.limitOrder.findMany({
+      where: {
+        userId,
+        marketId,
+        status: { in: ['PENDING', 'PARTIAL'] }
+      },
+      include: {
+        market: {
+          select: { title: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async cancelLimitOrder(id: string, userId: string) {
+    return await this.prisma.$transaction(async (tx) => {
+      const order = await tx.limitOrder.findFirst({
+        where: { id, userId, status: { in: ['PENDING', 'PARTIAL'] } }
+      });
+      if (!order) throw new NotFoundException('Limit order not found or already filled/cancelled');
+
+      const remainingShares = order.shares - order.filled;
+      if (order.orderType === 'BUY') {
+        const refundAmount = remainingShares * order.price;
+        await tx.user.update({
+          where: { id: userId },
+          data: { walletBalance: { increment: refundAmount } }
+        });
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'WITHDRAW',
+            amount: refundAmount,
+            status: 'SUCCESS'
+          }
+        });
+      } else {
+        await tx.holding.update({
+          where: { userId_marketId: { userId, marketId: order.marketId } },
+          data: {
+            yesShares: order.side === 'YES' ? { increment: remainingShares } : undefined,
+            noShares: order.side === 'NO' ? { increment: remainingShares } : undefined
+          }
+        });
+      }
+
+      const updatedOrder = await tx.limitOrder.update({
+        where: { id },
+        data: { status: 'CANCELLED' }
+      });
+
+      const updatedUser = await tx.user.findUnique({ where: { id: userId } });
+      if (updatedUser) {
+        this.realtime.broadcastWalletUpdate(userId, updatedUser.walletBalance);
+      }
+
+      return {
+        success: true,
+        order: updatedOrder
+      };
+    });
+  }
+
+  async matchLimitOrder(orderId: string, tx: any) {
+    const order = await tx.limitOrder.findUnique({
+      where: { id: orderId }
+    });
+    if (!order || order.status !== 'PENDING') return [];
+
+    let remainingShares = order.shares - order.filled;
+    if (remainingShares <= 0) return [];
+
+    const matches: any[] = [];
+
+    let candidates = [];
+    if (order.orderType === 'BUY') {
+      candidates = await tx.limitOrder.findMany({
+        where: {
+          marketId: order.marketId,
+          status: { in: ['PENDING', 'PARTIAL'] },
+          id: { not: order.id },
+          OR: [
+            { orderType: 'SELL', side: order.side, price: { lte: order.price } },
+            { orderType: 'BUY', side: order.side === 'YES' ? 'NO' : 'YES', price: { gte: 1.00 - order.price } }
+          ]
+        }
+      });
+    } else {
+      candidates = await tx.limitOrder.findMany({
+        where: {
+          marketId: order.marketId,
+          status: { in: ['PENDING', 'PARTIAL'] },
+          id: { not: order.id },
+          orderType: 'BUY',
+          side: order.side,
+          price: { gte: order.price }
+        }
+      });
+    }
+
+    const mapped = candidates.map((cp: any) => {
+      const executionPrice = (order.side === cp.side) ? cp.price : (1.00 - cp.price);
+      return { cp, executionPrice };
+    });
+
+    mapped.sort((a: any, b: any) => {
+      if (a.executionPrice !== b.executionPrice) {
+        return order.orderType === 'BUY'
+          ? (a.executionPrice - b.executionPrice)
+          : (b.executionPrice - a.executionPrice);
+      }
+      return new Date(a.cp.createdAt).getTime() - new Date(b.cp.createdAt).getTime();
+    });
+
+    const counterparties = mapped.map((x: any) => x.cp);
+
+    for (const cp of counterparties) {
+      if (remainingShares <= 0) break;
+
+      const cpRemaining = cp.shares - cp.filled;
+      const matchShares = Math.min(remainingShares, cpRemaining);
+
+      if (matchShares <= 0) continue;
+
+      if (order.side === cp.side && order.orderType !== cp.orderType) {
+        const buyer = order.orderType === 'BUY' ? order : cp;
+        const seller = order.orderType === 'SELL' ? order : cp;
+        const executionPrice = cp.price;
+
+        await tx.user.update({
+          where: { id: seller.userId },
+          data: { walletBalance: { increment: matchShares * executionPrice } }
+        });
+        await tx.transaction.create({
+          data: {
+            userId: seller.userId,
+            type: seller.side === 'YES' ? 'SELL_YES' : 'SELL_NO',
+            amount: matchShares * executionPrice,
+            status: 'SUCCESS'
+          }
+        });
+
+        await tx.holding.upsert({
+          where: { userId_marketId: { userId: buyer.userId, marketId: order.marketId } },
+          create: {
+            userId: buyer.userId,
+            marketId: order.marketId,
+            yesShares: buyer.side === 'YES' ? matchShares : 0,
+            noShares: buyer.side === 'NO' ? matchShares : 0,
+          },
+          update: {
+            yesShares: buyer.side === 'YES' ? { increment: matchShares } : undefined,
+            noShares: buyer.side === 'NO' ? { increment: matchShares } : undefined,
+          }
+        });
+
+        await tx.trade.create({
+          data: {
+            userId: buyer.userId,
+            marketId: order.marketId,
+            side: buyer.side,
+            amount: matchShares * executionPrice,
+            shares: matchShares,
+            price: executionPrice
+          }
+        });
+
+        if (buyer.price > executionPrice) {
+          const refund = matchShares * (buyer.price - executionPrice);
+          await tx.user.update({
+            where: { id: buyer.userId },
+            data: { walletBalance: { increment: refund } }
+          });
+        }
+
+        matches.push({
+          shares: matchShares,
+          price: executionPrice,
+          makerUserId: cp.userId,
+          makerSide: cp.side,
+          makerOrderId: cp.id,
+          takerUserId: order.userId,
+        });
+      }
+      else if (order.orderType === 'BUY' && cp.orderType === 'BUY' && order.side !== cp.side) {
+        const buyerYes = order.side === 'YES' ? order : cp;
+        const buyerNo = order.side === 'NO' ? order : cp;
+
+        await tx.holding.upsert({
+          where: { userId_marketId: { userId: buyerYes.userId, marketId: order.marketId } },
+          create: {
+            userId: buyerYes.userId,
+            marketId: order.marketId,
+            yesShares: matchShares,
+          },
+          update: {
+            yesShares: { increment: matchShares },
+          }
+        });
+
+        await tx.holding.upsert({
+          where: { userId_marketId: { userId: buyerNo.userId, marketId: order.marketId } },
+          create: {
+            userId: buyerNo.userId,
+            marketId: order.marketId,
+            noShares: matchShares,
+          },
+          update: {
+            noShares: { increment: matchShares },
+          }
+        });
+
+        await tx.trade.create({
+          data: {
+            userId: buyerYes.userId,
+            marketId: order.marketId,
+            side: 'YES',
+            amount: matchShares * buyerYes.price,
+            shares: matchShares,
+            price: buyerYes.price
+          }
+        });
+
+        await tx.trade.create({
+          data: {
+            userId: buyerNo.userId,
+            marketId: order.marketId,
+            side: 'NO',
+            amount: matchShares * buyerNo.price,
+            shares: matchShares,
+            price: buyerNo.price
+          }
+        });
+
+        const totalCost = buyerYes.price + buyerNo.price;
+        if (totalCost > 1.00) {
+          const surplus = totalCost - 1.00;
+          const taker = order.id === orderId ? order : cp;
+          await tx.user.update({
+            where: { id: taker.userId },
+            data: { walletBalance: { increment: matchShares * surplus } }
+          });
+        }
+
+        matches.push({
+          shares: matchShares,
+          price: cp.price,
+          makerUserId: cp.userId,
+          makerSide: cp.side,
+          makerOrderId: cp.id,
+          takerUserId: order.userId,
+        });
+      }
+
+      await tx.market.update({
+        where: { id: order.marketId },
+        data: { volume: { increment: matchShares * (cp.price + order.price) / 2 } }
+      });
+
+      const newCpFilled = cp.filled + matchShares;
+      const newCpStatus = newCpFilled >= cp.shares ? 'FILLED' : 'PARTIAL';
+      await tx.limitOrder.update({
+        where: { id: cp.id },
+        data: { filled: newCpFilled, status: newCpStatus }
+      });
+
+      remainingShares -= matchShares;
+
+      const cpUser = await tx.user.findUnique({ where: { id: cp.userId } });
+      if (cpUser) {
+        this.realtime.broadcastWalletUpdate(cp.userId, cpUser.walletBalance);
+      }
+    }
+
+    const orderStatus = remainingShares <= 0 ? 'FILLED' : (order.shares - remainingShares > 0 ? 'PARTIAL' : 'PENDING');
+    await tx.limitOrder.update({
+      where: { id: order.id },
+      data: { filled: order.shares - remainingShares, status: orderStatus }
+    });
+
+    return matches;
   }
 }

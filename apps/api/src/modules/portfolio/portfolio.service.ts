@@ -37,7 +37,7 @@ export class PortfolioService {
       const yesPrice = LMSR.getYesPrice(market.yesShares, market.noShares, market.liquidity);
       const noPrice = 1 - yesPrice;
 
-      // 1. Fetch all trades by user in this market to calculate cost basis
+      // 1. Fetch all trades by user in this market to calculate cost basis and realized proceeds
       const marketTrades = await this.prisma.trade.findMany({
         where: { userId, marketId: market.id },
       });
@@ -46,30 +46,40 @@ export class PortfolioService {
       let yesCashSpent = 0;
       let noSharesBought = 0;
       let noCashSpent = 0;
+      let yesSharesSold = 0;
+      let yesCashReceived = 0;
+      let noSharesSold = 0;
+      let noCashReceived = 0;
 
       marketTrades.forEach((trade) => {
-        // Only count BUY trades for cost basis — SELL_YES/SELL_NO are exits, not entries
         if (trade.side === 'YES') {
           yesSharesBought += trade.shares;
           yesCashSpent += trade.amount;
         } else if (trade.side === 'NO') {
           noSharesBought += trade.shares;
           noCashSpent += trade.amount;
+        } else if (trade.side === 'SELL_YES') {
+          yesSharesSold += trade.shares;
+          yesCashReceived += trade.amount;
+        } else if (trade.side === 'SELL_NO') {
+          noSharesSold += trade.shares;
+          noCashReceived += trade.amount;
         }
-        // 'SELL_YES' and 'SELL_NO' trades are intentionally excluded from cost basis
       });
 
       if (market.resolved) {
         // Realized Settlement
         const winningSide = market.outcome; // "YES" or "NO"
-        const yesValue = winningSide === 'YES' ? yesSharesBought * 1.0 : 0;
-        const noValue = winningSide === 'NO' ? noSharesBought * 1.0 : 0;
+        const remainingYes = Math.max(0, yesSharesBought - yesSharesSold);
+        const remainingNo = Math.max(0, noSharesBought - noSharesSold);
         
-        const yesPnL = yesValue - yesCashSpent;
-        const noPnL = noValue - noCashSpent;
+        const settlementPayout = winningSide === 'YES' ? remainingYes * 1.0 : (winningSide === 'NO' ? remainingNo * 1.0 : 0);
+        const totalReceived = yesCashReceived + noCashReceived + settlementPayout;
+        const totalSpent = yesCashSpent + noCashSpent;
+        const pnl = totalReceived - totalSpent;
         
-        totalRealizedPnL += (yesPnL + noPnL);
-        totalInvestedAmount += (yesCashSpent + noCashSpent);
+        totalRealizedPnL += pnl;
+        totalInvestedAmount += totalSpent;
       } else {
         // Unrealized Valuation - only process if user has active shares
         if (holding.yesShares > 0 || holding.noShares > 0) {
@@ -82,9 +92,17 @@ export class PortfolioService {
           // Cost basis = weighted average entry cost for remaining shares
           const costBasis = holding.yesShares * yesAvgEntry + holding.noShares * noAvgEntry;
           
-          const pnl = currentValue - costBasis;
+          // Unrealized PnL is the PnL of the current active position
+          const unrealizedPnL = currentValue - costBasis;
           
-          totalUnrealizedPnL += pnl;
+          // Realized PnL from early exits in this market:
+          const yesRealizedPnL = yesCashReceived - (yesSharesSold * yesAvgEntry);
+          const noRealizedPnL = noCashReceived - (noSharesSold * noAvgEntry);
+          const realizedPnLFromSells = yesRealizedPnL + noRealizedPnL;
+
+          totalUnrealizedPnL += unrealizedPnL;
+          totalRealizedPnL += realizedPnLFromSells; // Add realized portion to realized P&L
+
           totalHoldingsValue += currentValue;
           totalInvestedAmount += costBasis;
           
@@ -94,9 +112,9 @@ export class PortfolioService {
             ...holding,
             currentValue: parseFloat(currentValue.toFixed(2)),
             costBasis: parseFloat(costBasis.toFixed(2)),
-            unrealizedPnL: parseFloat(pnl.toFixed(2)),
+            unrealizedPnL: parseFloat(unrealizedPnL.toFixed(2)),
             avgEntryPrice: parseFloat(avgEntryPrice.toFixed(2)),
-            pnl: parseFloat(pnl.toFixed(2)),
+            pnl: parseFloat((unrealizedPnL + realizedPnLFromSells).toFixed(2)), // Total market PnL
             market: {
               ...market,
               yesPrice,
@@ -146,6 +164,7 @@ export class PortfolioService {
 
     return {
       walletBalance: user.walletBalance,
+      reputationPoints: user.reputationPoints,
       totalHoldingsValue: parseFloat(totalHoldingsValue.toFixed(2)),
       netWorth: parseFloat((user.walletBalance + totalHoldingsValue).toFixed(2)),
       totalPnL: parseFloat(totalPnL.toFixed(2)),

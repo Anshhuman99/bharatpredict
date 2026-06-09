@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Headers, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Headers, HttpCode, HttpStatus, BadRequestException, UseGuards, Req } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AuthGuard } from '../auth/auth.guard';
 import * as crypto from 'crypto';
 
 @Controller('payments')
@@ -96,5 +97,21 @@ export class PaymentsController {
     }
 
     return { status: 'SUCCESS' };
+  }
+
+  @Get('rewards')
+  getRewardsCatalog() {
+    return this.paymentsService.getRewardsCatalog();
+  }
+
+  @Post('redeem-voucher')
+  @UseGuards(AuthGuard)
+  async redeemVoucher(@Body() dto: { rewardId: string }, @Req() req: any) {
+    const result = await this.paymentsService.redeemVoucher(req.user.id, dto.rewardId);
+    if (result.success) {
+      // Broadcast wallet balance update
+      this.realtime.broadcastWalletUpdate(req.user.id, result.newBalance);
+    }
+    return result;
   }
 }
