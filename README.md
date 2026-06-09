@@ -1,5 +1,7 @@
 # BharatPredict 🇮🇳 — Trade What India Thinks
 
+[![Live Site](https://img.shields.io/badge/Demo-Live_on_Vercel-blueviolet?style=for-the-badge&logo=vercel&logoColor=white)](https://bharatpredict-web.vercel.app/)
+
 BharatPredict is a high-fidelity, real-time prediction market platform optimized for India (covering IPL cricket, stock indexes like NIFTY, assembly elections, and Bollywood movie openings). Users buy YES or NO shares on real-world events, where share prices represent crowdsourced probabilities in real time (e.g., ₹0.65 representing a 65% probability) and settle strictly at ₹1.00 for correct outcomes.
 
 ---
