@@ -107,6 +107,6 @@ Rather than forcing users to guess share volumes, they input exact cash amounts 
 ## 🛣️ Future Roadmap
 
 1. **Production Database Scale**: Switch Prisma datasource back to PostgreSQL and plug Redis caching layers in docker networks.
-2. **P2P Orderbook Matcher**: Upgrade from AMM-only to a hybrid model supporting peer-to-peer limit orders.
+2. [x] **P2P Orderbook Matcher**: Upgrade from AMM-only to a hybrid model supporting peer-to-peer limit orders. (Completed!)
 3. **Decentralized Resolvers**: Plug oracle resolutions or public consensus vote pools.
 4. **Real UPI Integrations**: Connect Razorpay/Cashfree sandbox endpoints for genuine merchant UPI callbacks.
