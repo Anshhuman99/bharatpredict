@@ -23,11 +23,11 @@ npm run db:seed
 ```
 
 ### 3. Launch Development Servers (Backend & Web Frontend)
-Start both NestJS API (on port `4000`) and the Next.js 15 App (on port `3000`) in parallel using Turborepo:
+Start both NestJS API (on port `4000`) and the Next.js 15 App (on port `3050`) in parallel using Turborepo:
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser to start trading!
+Open [http://localhost:3050](http://localhost:3050) in your browser to start trading!
 
 ---
 
